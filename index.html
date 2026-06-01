@@ -1,0 +1,853 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Bússola Financeira — Itaú Personnalité</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@600;700&family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  :root {
+    /* Itaú Personnalité palette */
+    --gold:        #C9A47A;
+    --gold-light:  #F5E8D4;
+    --gold-dark:   #9A7A54;
+    --navy:        #0D1B2E;
+    --navy-mid:    #162032;
+    --navy-light:  #1E2F45;
+    --navy-border: #243447;
+    --green:       #4ADE80;
+    --green-dim:   rgba(74,222,128,0.12);
+    --red:         #F87171;
+    --red-dim:     rgba(248,113,113,0.12);
+    --amber:       #FBBF24;
+    --amber-dim:   rgba(251,191,36,0.12);
+    --blue-dim:    rgba(147,197,253,0.12);
+    --text:        #F0EDE8;
+    --text2:       #B0A898;
+    --bg:          #0D1B2E;
+    --border:      #243447;
+    --surface:     #162032;
+    --surface2:    #1E2F45;
+  }
+  body { font-family: 'Inter', system-ui, sans-serif; background: var(--navy); color: var(--text); min-height: 100vh; }
+
+  header {
+    background: linear-gradient(180deg, #0A1624 0%, var(--navy) 100%);
+    border-bottom: 1px solid var(--gold-dark);
+    padding: 18px 24px;
+    display: flex; align-items: center; gap: 16px;
+  }
+  header .logo-mark { width: 36px; height: 36px; background: linear-gradient(135deg, var(--gold), var(--gold-dark)); border-radius: 8px; display: flex; align-items: center; justify-content: center; font-size: 1.1rem; flex-shrink: 0; }
+  header h1 { font-family: 'Playfair Display', serif; font-size: 1.2rem; font-weight: 600; color: var(--gold); letter-spacing: 0.02em; }
+  header span { font-size: 0.78rem; color: var(--text2); letter-spacing: 0.04em; text-transform: uppercase; }
+
+  nav { display: flex; gap: 2px; padding: 20px 24px 0; flex-wrap: wrap; }
+  nav button {
+    padding: 9px 18px; border-radius: 8px 8px 0 0;
+    border: 1px solid var(--navy-border); border-bottom: none;
+    background: var(--navy-mid); cursor: pointer; font-size: 0.85rem;
+    color: var(--text2); font-family: 'Inter', sans-serif; letter-spacing: 0.02em;
+    transition: all 0.2s;
+  }
+  nav button:hover { color: var(--gold); background: var(--navy-light); }
+  nav button.active { background: var(--surface); color: var(--gold); font-weight: 600; border-color: var(--gold-dark); }
+  .tab { display: none; padding: 28px; background: var(--surface); border: 1px solid var(--navy-border); border-radius: 0 8px 8px 8px; margin: 0 24px 24px; }
+  .tab.active { display: block; }
+
+  /* Cards */
+  .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 14px; margin-bottom: 24px; }
+  .card { background: var(--surface2); border: 1px solid var(--navy-border); border-radius: 10px; padding: 18px 16px; }
+  .card label { font-size: 0.72rem; color: var(--text2); display: block; margin-bottom: 6px; text-transform: uppercase; letter-spacing: 0.06em; }
+  .card .val { font-size: 1.35rem; font-weight: 600; color: var(--text); }
+  .card .sub { font-size: 0.7rem; color: var(--text2); margin-top: 4px; }
+  .card.green { border-color: rgba(74,222,128,0.3); background: var(--green-dim); }
+  .card.green .val { color: var(--green); }
+  .card.red { border-color: rgba(248,113,113,0.3); background: var(--red-dim); }
+  .card.red .val { color: var(--red); }
+  .card.blue { border-color: rgba(147,197,253,0.3); background: var(--blue-dim); }
+  .card.blue .val { color: #93C5FD; }
+  .card.purple { border-color: rgba(196,181,253,0.3); background: rgba(196,181,253,0.08); }
+  .card.purple .val { color: #C4B5FD; }
+  .card.amber { border-color: rgba(251,191,36,0.3); background: var(--amber-dim); }
+  .card.amber .val { color: var(--amber); }
+  .card.gold { border-color: var(--gold-dark); background: rgba(201,164,122,0.1); }
+  .card.gold .val { color: var(--gold); }
+
+  /* Chart */
+  .chart-wrap { position: relative; height: 280px; margin-bottom: 24px; }
+
+  /* Insights */
+  .insights { display: grid; gap: 10px; margin-bottom: 24px; }
+  .insight { padding: 14px 16px; border-radius: 8px; border-left: 3px solid; font-size: 0.88rem; }
+  .insight.ok  { background: var(--green-dim); border-color: var(--green); color: var(--text); }
+  .insight.warn { background: var(--amber-dim); border-color: var(--amber); color: var(--text); }
+  .insight.bad  { background: var(--red-dim);   border-color: var(--red);   color: var(--text); }
+  .insight.info { background: var(--blue-dim);  border-color: #93C5FD;      color: var(--text); }
+  .insight strong { display: block; margin-bottom: 3px; color: var(--text); }
+
+  /* Form */
+  .form-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 12px; margin-bottom: 16px; }
+  .form-grid label { display: flex; flex-direction: column; font-size: 0.78rem; color: var(--text2); gap: 5px; text-transform: uppercase; letter-spacing: 0.05em; }
+  .form-grid input, .form-grid select {
+    padding: 9px 11px; border: 1px solid var(--navy-border); border-radius: 7px;
+    font-size: 0.9rem; background: var(--surface2); color: var(--text);
+    font-family: 'Inter', sans-serif;
+  }
+  .form-grid input:focus, .form-grid select:focus { outline: none; border-color: var(--gold-dark); }
+  .form-grid select option { background: var(--navy-mid); }
+  .btn { padding: 9px 22px; border-radius: 7px; border: none; cursor: pointer; font-size: 0.88rem; font-weight: 600; font-family: 'Inter', sans-serif; letter-spacing: 0.03em; transition: all 0.2s; }
+  .btn-primary { background: linear-gradient(135deg, var(--gold), var(--gold-dark)); color: var(--navy); }
+  .btn-primary:hover { opacity: 0.9; }
+  .btn-danger { background: var(--red-dim); color: var(--red); border: 1px solid rgba(248,113,113,0.3); font-size: 0.78rem; padding: 4px 10px; }
+  .btn-secondary { background: var(--surface2); border: 1px solid var(--navy-border); color: var(--text2); }
+  .btn-secondary:hover { border-color: var(--gold-dark); color: var(--gold); }
+
+  /* Table */
+  .table-wrap { overflow-x: auto; }
+  table { width: 100%; border-collapse: collapse; font-size: 0.86rem; }
+  th { text-align: left; padding: 10px 12px; background: var(--navy); border-bottom: 1px solid var(--navy-border); color: var(--text2); font-weight: 500; text-transform: uppercase; font-size: 0.72rem; letter-spacing: 0.06em; }
+  td { padding: 11px 12px; border-bottom: 1px solid var(--navy-border); vertical-align: middle; color: var(--text); }
+  tr:last-child td { border-bottom: none; }
+  tr:hover td { background: rgba(255,255,255,0.02); }
+  .badge { display: inline-block; padding: 3px 10px; border-radius: 999px; font-size: 0.75rem; font-weight: 600; }
+  .badge.pagar   { background: var(--red-dim); color: var(--red); border: 1px solid rgba(248,113,113,0.2); }
+  .badge.receber { background: var(--green-dim); color: var(--green); border: 1px solid rgba(74,222,128,0.2); }
+  .badge.ctv { background: var(--amber-dim); color: var(--amber); border: 1px solid rgba(251,191,36,0.2); }
+  .badge.do  { background: rgba(196,181,253,0.12); color: #C4B5FD; border: 1px solid rgba(196,181,253,0.2); }
+  .tag-status { font-size: 0.72rem; color: var(--text2); }
+
+  /* Import */
+  .drop-area { border: 2px dashed var(--navy-border); border-radius: 10px; padding: 40px; text-align: center; color: var(--text2); cursor: pointer; transition: all 0.2s; margin-bottom: 16px; background: var(--surface2); }
+  .drop-area:hover, .drop-area.drag { border-color: var(--gold); color: var(--gold); }
+  .drop-area input { display: none; }
+  .import-help { font-size: 0.82rem; color: var(--text2); margin-bottom: 16px; line-height: 1.7; }
+  .import-help code { background: var(--navy); border: 1px solid var(--navy-border); padding: 2px 7px; border-radius: 4px; font-size: 0.78rem; color: var(--gold); }
+
+  .filter-row { display: flex; gap: 10px; margin-bottom: 16px; flex-wrap: wrap; align-items: flex-end; }
+  .filter-row input, .filter-row select { padding: 7px 10px; border: 1px solid var(--navy-border); border-radius: 6px; font-size: 0.85rem; background: var(--surface2); color: var(--text); }
+  .filter-row label { font-size: 0.72rem; color: var(--text2); text-transform: uppercase; letter-spacing: 0.05em; display: flex; flex-direction: column; gap: 4px; }
+
+  .section-title { font-size: 0.78rem; font-weight: 600; color: var(--gold); margin-bottom: 14px; margin-top: 8px; text-transform: uppercase; letter-spacing: 0.1em; }
+  .empty { text-align: center; color: var(--text2); padding: 32px; font-size: 0.88rem; }
+  .row-paid td { opacity: 0.4; }
+  .pos { color: var(--green); font-weight: 600; }
+  .neg { color: var(--red); font-weight: 600; }
+
+  /* Bussola */
+  .bussola-hero {
+    background: linear-gradient(135deg, #0A1624 0%, #162032 60%, #1a2a1a 100%);
+    border: 1px solid var(--gold-dark); border-radius: 12px; padding: 24px 28px; margin-bottom: 24px;
+    position: relative; overflow: hidden;
+  }
+  .bussola-hero::before {
+    content: ''; position: absolute; top: -40px; right: -40px;
+    width: 160px; height: 160px;
+    background: radial-gradient(circle, rgba(201,164,122,0.15) 0%, transparent 70%);
+    pointer-events: none;
+  }
+  .bussola-hero h2 { font-family: 'Playfair Display', serif; font-size: 1.15rem; margin-bottom: 6px; color: var(--gold); }
+  .bussola-hero p { font-size: 0.84rem; color: var(--text2); line-height: 1.6; }
+  .toc-formula { background: var(--surface2); border: 1px solid var(--navy-border); border-left: 3px solid var(--gold); border-radius: 8px; padding: 16px 18px; margin-bottom: 24px; font-size: 0.86rem; color: var(--text2); line-height: 1.8; }
+  .toc-formula span { font-weight: 700; color: var(--gold); }
+
+  .toc-questions { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px; margin-bottom: 24px; }
+  .toc-q { border: 1px solid var(--navy-border); border-radius: 10px; padding: 16px; background: var(--surface2); }
+  .toc-q .q-icon { font-size: 1.4rem; margin-bottom: 8px; }
+  .toc-q .q-label { font-size: 0.7rem; color: var(--text2); text-transform: uppercase; font-weight: 600; letter-spacing: 0.08em; }
+  .toc-q .q-val { font-size: 1.15rem; font-weight: 700; margin-top: 6px; }
+  .toc-q.up { border-color: rgba(74,222,128,0.3); background: var(--green-dim); }
+  .toc-q.up .q-val { color: var(--green); }
+  .toc-q.down { border-color: rgba(248,113,113,0.3); background: var(--red-dim); }
+  .toc-q.down .q-val { color: var(--red); }
+  .toc-q.neutral { border-color: rgba(201,164,122,0.3); background: rgba(201,164,122,0.08); }
+  .toc-q.neutral .q-val { color: var(--gold); }
+
+  .invest-row { display: flex; gap: 12px; align-items: flex-end; margin-bottom: 24px; flex-wrap: wrap; }
+  .invest-row label { font-size: 0.72rem; color: var(--text2); text-transform: uppercase; letter-spacing: 0.06em; display: flex; flex-direction: column; gap: 5px; }
+  .invest-row input { padding: 9px 11px; border: 1px solid var(--navy-border); border-radius: 7px; font-size: 0.9rem; width: 220px; background: var(--surface2); color: var(--text); }
+  .invest-row input:focus { outline: none; border-color: var(--gold-dark); }
+
+  /* Divider */
+  .divider { height: 1px; background: var(--navy-border); margin: 20px 0; }
+
+  /* Scrollbar */
+  ::-webkit-scrollbar { width: 6px; height: 6px; }
+  ::-webkit-scrollbar-track { background: var(--navy); }
+  ::-webkit-scrollbar-thumb { background: var(--navy-border); border-radius: 3px; }
+  ::-webkit-scrollbar-thumb:hover { background: var(--gold-dark); }
+
+  @media (max-width: 600px) {
+    nav { padding: 16px 12px 0; }
+    .tab { margin: 0 12px 24px; padding: 16px; }
+  }
+</style>
+  .toc-formula span { font-weight: 700; }
+  .toc-questions { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px; margin-bottom: 24px; }
+  .toc-q { border: 2px solid var(--border); border-radius: 10px; padding: 14px; }
+  .toc-q .q-icon { font-size: 1.5rem; margin-bottom: 6px; }
+  .toc-q .q-label { font-size: 0.75rem; color: var(--gray); text-transform: uppercase; font-weight: 600; letter-spacing: 0.05em; }
+  .toc-q .q-val { font-size: 1.2rem; font-weight: 700; margin-top: 4px; }
+  .toc-q.up { border-color: #86efac; background: var(--green-light); }
+  .toc-q.up .q-val { color: var(--green); }
+  .toc-q.down { border-color: #fca5a5; background: var(--red-light); }
+  .toc-q.down .q-val { color: var(--red); }
+  .toc-q.neutral { border-color: #93c5fd; background: var(--blue-light); }
+  .toc-q.neutral .q-val { color: var(--blue); }
+  .invest-row { display: flex; gap: 12px; align-items: flex-end; margin-bottom: 24px; flex-wrap: wrap; }
+  .invest-row label { font-size: 0.82rem; color: var(--gray); display: flex; flex-direction: column; gap: 4px; }
+  .invest-row input { padding: 8px 10px; border: 1px solid var(--border); border-radius: 6px; font-size: 0.9rem; width: 200px; }
+
+  @media (max-width: 600px) {
+    nav { padding: 16px 12px 0; }
+    .tab { margin: 0 12px 24px; padding: 16px; }
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="logo-mark">🧭</div>
+  <div>
+    <h1>Bússola Financeira</h1>
+    <span id="hd-subtitle">Gestão de Fluxo de Caixa · TOC · Personnalité</span>
+  </div>
+</header>
+
+<nav>
+  <button class="active" onclick="showTab('dashboard')">📊 Dashboard</button>
+  <button onclick="showTab('bussola')">🧭 Bússola</button>
+  <button onclick="showTab('lancamentos')">📋 Lançamentos</button>
+  <button onclick="showTab('previsao')">📅 Previsão</button>
+  <button onclick="showTab('importar')">📂 Importar</button>
+</nav>
+
+<!-- DASHBOARD -->
+<div class="tab active" id="tab-dashboard">
+  <div class="cards">
+    <div class="card blue"><label>Saldo Atual (pago)</label><div class="val" id="c-saldo">R$ 0</div></div>
+    <div class="card green"><label>A Receber (próx. 30d)</label><div class="val" id="c-receber">R$ 0</div></div>
+    <div class="card red"><label>A Pagar (próx. 30d)</label><div class="val" id="c-pagar">R$ 0</div></div>
+    <div class="card" id="card-liquido"><label>Saldo Previsto (30d)</label><div class="val" id="c-liquido">R$ 0</div></div>
+  </div>
+  <div class="section-title">Fluxo Diário — Próximos 30 dias</div>
+  <div class="chart-wrap"><canvas id="chartFluxo"></canvas></div>
+  <div class="section-title">Insights de Previsibilidade</div>
+  <div class="insights" id="insights-box"></div>
+</div>
+
+<!-- BUSSOLA FINANCEIRA -->
+<div class="tab" id="tab-bussola">
+  <div class="bussola-hero">
+    <h2>🧭 Bússola Financeira — TOC (Teoria das Restrições)</h2>
+    <p>Baseada no livro de Thomas Corbett. Três medidas guiam todas as decisões: <strong>Ganho (G)</strong>, <strong>Investimento (I)</strong> e <strong>Despesa Operacional (DO)</strong>.</p>
+  </div>
+
+  <div class="toc-formula">
+    <strong>As 3 medidas da TOC:</strong><br><br>
+    🟢 <span>Ganho (G)</span> = Receitas recebidas − Custo Totalmente Variável (CTV) &nbsp;|&nbsp;
+    🔵 <span>Despesa Operacional (DO)</span> = Todos os gastos fixos para manter a empresa funcionando &nbsp;|&nbsp;
+    🟡 <span>Investimento (I)</span> = Total de ativos da empresa<br><br>
+    <strong>Lucro Líquido (LL) = G − DO &nbsp;|&nbsp; RSI = LL / I</strong><br><br>
+    <em style="color:var(--gray)">Toda decisão deve ser avaliada pelo seu impacto nessas 3 medidas. A meta: aumentar G, diminuir I e diminuir DO.</em>
+  </div>
+
+  <div class="invest-row">
+    <label>Investimento total da empresa (R$)
+      <input type="number" id="inv-total" placeholder="Ex: 500000" oninput="saveBussola();renderBussola()">
+    </label>
+    <button class="btn btn-primary" onclick="saveBussola();renderBussola()">Atualizar</button>
+  </div>
+
+  <div class="section-title">Indicadores do Período Atual</div>
+  <div class="cards">
+    <div class="card green"><label>Ganho (G)</label><div class="val" id="b-ganho">R$ 0</div><div class="sub">Receitas recebidas − CTV</div></div>
+    <div class="card purple"><label>Despesa Operacional (DO)</label><div class="val" id="b-do">R$ 0</div><div class="sub">Gastos fixos operacionais</div></div>
+    <div class="card" id="b-card-ll"><label>Lucro Líquido (LL)</label><div class="val" id="b-ll">R$ 0</div><div class="sub">G − DO</div></div>
+    <div class="card amber"><label>RSI (anualizado)</label><div class="val" id="b-rsi">—</div><div class="sub">LL anual / Investimento</div></div>
+    <div class="card blue"><label>CTV Total</label><div class="val" id="b-ctv">R$ 0</div><div class="sub">Custos totalmente variáveis</div></div>
+  </div>
+
+  <div class="section-title">As 3 Perguntas da Bússola Financeira</div>
+  <p style="font-size:0.85rem;color:var(--gray);margin-bottom:16px">Antes de qualquer decisão, avalie o impacto nestas 3 dimensões:</p>
+  <div class="toc-questions" id="toc-questions"></div>
+
+  <div class="section-title" style="margin-top:8px">Insights da Bússola</div>
+  <div class="insights" id="bussola-insights"></div>
+
+  <div class="section-title" style="margin-top:16px">Classificação dos Lançamentos</div>
+  <p style="font-size:0.85rem;color:var(--gray);margin-bottom:12px">
+    Classifique cada <strong>conta a pagar</strong> como <span class="badge ctv">CTV</span> (custo que varia com o volume — matéria-prima, comissão, embalagem) ou <span class="badge do">DO</span> (gasto fixo — salário, aluguel, energia, depreciação).
+    As <strong>contas a receber</strong> compõem o <strong>Ganho</strong>.
+  </p>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Descrição</th><th>Tipo</th><th>Valor</th><th>Status</th><th>Classificação TOC</th></tr></thead>
+      <tbody id="tb-class"></tbody>
+    </table>
+  </div>
+</div>
+
+<!-- LANÇAMENTOS -->
+<div class="tab" id="tab-lancamentos">
+  <div class="section-title">Novo Lançamento</div>
+  <div class="form-grid">
+    <label>Tipo
+      <select id="f-tipo" onchange="toggleTocClass()">
+        <option value="receber">A Receber</option>
+        <option value="pagar">A Pagar</option>
+      </select>
+    </label>
+    <label>Descrição
+      <input id="f-desc" type="text" placeholder="Ex: Fatura cliente X">
+    </label>
+    <label>Valor (R$)
+      <input id="f-valor" type="number" min="0" step="0.01" placeholder="0,00">
+    </label>
+    <label>Vencimento
+      <input id="f-venc" type="date">
+    </label>
+    <label>Categoria
+      <input id="f-cat" type="text" placeholder="Ex: Aluguel, Vendas...">
+    </label>
+    <label>Recorrência
+      <select id="f-rec">
+        <option value="none">Sem recorrência</option>
+        <option value="mensal">Mensal</option>
+        <option value="semanal">Semanal</option>
+        <option value="quinzenal">Quinzenal</option>
+      </select>
+    </label>
+    <label id="toc-class-label">Classificação TOC
+      <select id="f-toc">
+        <option value="do">DO — Despesa Operacional (fixo)</option>
+        <option value="ctv">CTV — Custo Totalmente Variável</option>
+      </select>
+    </label>
+  </div>
+  <div style="display:flex;gap:10px;margin-bottom:24px;">
+    <button class="btn btn-primary" onclick="addLancamento()">Adicionar</button>
+    <button class="btn btn-secondary" onclick="clearForm()">Limpar</button>
+  </div>
+
+  <div class="section-title">Lançamentos</div>
+  <div class="filter-row">
+    <label>Tipo:
+      <select id="fil-tipo" onchange="renderTable()">
+        <option value="">Todos</option>
+        <option value="receber">A Receber</option>
+        <option value="pagar">A Pagar</option>
+      </select>
+    </label>
+    <label>Status:
+      <select id="fil-status" onchange="renderTable()">
+        <option value="">Todos</option>
+        <option value="pendente">Pendente</option>
+        <option value="pago">Pago/Recebido</option>
+      </select>
+    </label>
+    <input id="fil-busca" type="text" placeholder="Buscar..." oninput="renderTable()">
+  </div>
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr><th>Tipo</th><th>Descrição</th><th>Categoria</th><th>Vencimento</th><th>Valor</th><th>TOC</th><th>Status</th><th></th></tr>
+      </thead>
+      <tbody id="tb-body"></tbody>
+    </table>
+  </div>
+</div>
+
+<!-- PREVISÃO -->
+<div class="tab" id="tab-previsao">
+  <div class="section-title">Previsão Mensal — Próximos 6 meses</div>
+  <div class="chart-wrap" style="height:240px"><canvas id="chartPrevisao"></canvas></div>
+  <div style="margin-top:24px" class="section-title">Detalhamento por Mês</div>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Mês</th><th>Entradas</th><th>Saídas</th><th>Saldo do Mês</th><th>Saldo Acumulado</th></tr></thead>
+      <tbody id="tb-forecast"></tbody>
+    </table>
+  </div>
+</div>
+
+<!-- IMPORTAR -->
+<div class="tab" id="tab-importar">
+  <div class="section-title">Importar CSV</div>
+  <p class="import-help">
+    Colunas obrigatórias: <code>tipo</code> (pagar/receber) · <code>descricao</code> · <code>valor</code> · <code>vencimento</code> (DD/MM/AAAA)<br>
+    Colunas opcionais: <code>categoria</code> · <code>toc</code> (ctv ou do)
+  </p>
+  <div class="drop-area" id="drop-area" onclick="document.getElementById('file-input').click()"
+    ondragover="event.preventDefault();this.classList.add('drag')"
+    ondragleave="this.classList.remove('drag')"
+    ondrop="handleDrop(event)">
+    <input type="file" id="file-input" accept=".csv,.txt" onchange="handleFile(this.files[0])">
+    <div style="font-size:2rem;margin-bottom:8px">📂</div>
+    <div>Clique ou arraste seu arquivo CSV aqui</div>
+    <div style="font-size:0.8rem;margin-top:4px">.csv ou .txt</div>
+  </div>
+  <div id="import-result" style="display:none">
+    <div id="import-msg" style="margin-bottom:12px;font-weight:600;"></div>
+    <div class="table-wrap"><table id="import-preview"><thead></thead><tbody></tbody></table></div>
+    <div style="margin-top:16px;display:flex;gap:10px">
+      <button class="btn btn-primary" onclick="confirmImport()">Importar tudo</button>
+      <button class="btn btn-secondary" onclick="cancelImport()">Cancelar</button>
+    </div>
+  </div>
+  <div style="margin-top:24px">
+    <button class="btn btn-secondary" onclick="downloadTemplate()">⬇ Baixar modelo CSV</button>
+  </div>
+</div>
+
+<script>
+// ══════════════════════════════════════════════
+// ⚙️  CONFIGURAÇÃO SUPABASE — cole suas credenciais
+// ══════════════════════════════════════════════
+const SUPABASE_URL = 'COLE_SUA_URL_AQUI';
+const SUPABASE_KEY = 'COLE_SUA_ANON_KEY_AQUI';
+// ══════════════════════════════════════════════
+
+const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
+// ─── STATE ───────────────────────────────────────────────
+let data = [];
+let bussolaState = JSON.parse(localStorage.getItem('fc_bussola') || '{"investimento":0}');
+let chartFluxo, chartPrevisao;
+let pendingImport = [];
+let _saving = false;
+
+// ── Sync indicator ──────────────────────────────────────
+function showSync(msg, err) {
+  let el = document.getElementById('sync-status');
+  if (!el) {
+    el = document.createElement('div');
+    el.id = 'sync-status';
+    el.style.cssText = 'position:fixed;bottom:16px;right:16px;padding:8px 16px;border-radius:8px;font-size:.8rem;z-index:999;transition:opacity .4s;font-family:Inter,sans-serif';
+    document.body.appendChild(el);
+  }
+  el.style.background = err ? 'rgba(248,113,113,.15)' : 'rgba(74,222,128,.15)';
+  el.style.color = err ? '#F87171' : '#4ADE80';
+  el.style.border = `1px solid ${err ? 'rgba(248,113,113,.3)' : 'rgba(74,222,128,.3)'}`;
+  el.style.opacity = '1';
+  el.textContent = msg;
+  setTimeout(() => { el.style.opacity = '0'; }, 2500);
+}
+
+// ── Load from Supabase ───────────────────────────────────
+async function loadData() {
+  const { data: rows, error } = await sb.from('lancamentos').select('*').order('vencimento', { ascending: true });
+  if (error) { showSync('Erro ao carregar dados ✗', true); return; }
+  data = rows || [];
+  refreshAll();
+}
+
+// ── Save (insert/update) ─────────────────────────────────
+async function save() {
+  // refreshAll uses in-memory `data`; persist happens via individual ops
+  refreshAll();
+}
+
+async function _insert(item) {
+  const { id: _ignore, ...payload } = item;
+  const { data: rows, error } = await sb.from('lancamentos').insert(payload).select();
+  if (error) { showSync('Erro ao salvar ✗', true); return null; }
+  showSync('Salvo ✓');
+  return rows[0];
+}
+
+async function _update(id, patch) {
+  const { error } = await sb.from('lancamentos').update(patch).eq('id', id);
+  if (error) { showSync('Erro ao atualizar ✗', true); return false; }
+  showSync('Atualizado ✓');
+  return true;
+}
+
+async function _delete(id) {
+  const { error } = await sb.from('lancamentos').delete().eq('id', id);
+  if (error) { showSync('Erro ao remover ✗', true); return false; }
+  showSync('Removido ✓');
+  return true;
+}
+
+function saveBussola() {
+  bussolaState.investimento = parseFloat(document.getElementById('inv-total').value) || 0;
+  localStorage.setItem('fc_bussola', JSON.stringify(bussolaState));
+}
+
+// ─── NAV ─────────────────────────────────────────────────
+const TABS = ['dashboard','bussola','lancamentos','previsao','importar'];
+function showTab(id) {
+  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+  document.querySelectorAll('nav button').forEach(b => b.classList.remove('active'));
+  document.getElementById('tab-' + id).classList.add('active');
+  document.querySelectorAll('nav button')[TABS.indexOf(id)].classList.add('active');
+  if (id === 'dashboard') renderDashboard();
+  if (id === 'bussola') renderBussola();
+  if (id === 'previsao') renderPrevisao();
+  if (id === 'lancamentos') renderTable();
+}
+
+// ─── FORMAT ──────────────────────────────────────────────
+function fmt(v) { return 'R$ ' + Math.abs(v).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }); }
+function fmtSgn(v) { return (v >= 0 ? '+' : '-') + fmt(v); }
+function fmtDate(d) { if (!d) return '—'; const [y,m,dd] = d.split('-'); return `${dd}/${m}/${y}`; }
+function today() { return new Date().toISOString().split('T')[0]; }
+function addDays(dateStr, n) { const d = new Date(dateStr + 'T12:00:00'); d.setDate(d.getDate() + n); return d.toISOString().split('T')[0]; }
+function uid() { return Math.random().toString(36).slice(2) + Date.now().toString(36); }
+
+// ─── DASHBOARD ───────────────────────────────────────────
+function renderDashboard() {
+  const t = today(), t30 = addDays(t, 30);
+  let saldo = 0, recv30 = 0, pag30 = 0;
+  data.filter(r => r.status === 'pago').forEach(r => { saldo += r.tipo === 'receber' ? r.valor : -r.valor; });
+  data.filter(r => r.status !== 'pago' && r.vencimento >= t && r.vencimento <= t30).forEach(r => {
+    if (r.tipo === 'receber') recv30 += r.valor; else pag30 += r.valor;
+  });
+  const liq = recv30 - pag30;
+  document.getElementById('c-saldo').textContent = fmt(saldo);
+  document.getElementById('c-receber').textContent = fmt(recv30);
+  document.getElementById('c-pagar').textContent = fmt(pag30);
+  document.getElementById('c-liquido').textContent = fmtSgn(liq);
+  const cl = document.getElementById('card-liquido');
+  cl.className = 'card ' + (liq >= 0 ? 'green' : 'red');
+  renderChartFluxo();
+  renderInsights(saldo, recv30, pag30);
+  document.getElementById('hd-subtitle').textContent = `${data.length} lançamentos · Saldo ${fmt(saldo)}`;
+}
+
+function renderChartFluxo() {
+  const t = today();
+  const labels = [], entradas = [], saidas = [], saldoAcum = [];
+  let acum = 0;
+  data.filter(r => r.status === 'pago').forEach(r => { acum += r.tipo === 'receber' ? r.valor : -r.valor; });
+  for (let i = 0; i < 30; i++) {
+    const d = addDays(t, i);
+    labels.push(fmtDate(d));
+    let ent = 0, sai = 0;
+    data.filter(r => r.status !== 'pago' && r.vencimento === d).forEach(r => {
+      if (r.tipo === 'receber') ent += r.valor; else sai += r.valor;
+    });
+    entradas.push(ent); saidas.push(sai); acum += ent - sai; saldoAcum.push(acum);
+  }
+  if (chartFluxo) chartFluxo.destroy();
+  const chartDefaults = {
+    color: '#B0A898',
+    borderColor: '#243447',
+    plugins: { legend: { labels: { color: '#B0A898', font: { family: 'Inter' }}}}
+  };
+  chartFluxo = new Chart(document.getElementById('chartFluxo'), {
+    type: 'bar',
+    data: { labels, datasets: [
+      { label: 'Entradas', data: entradas, backgroundColor: 'rgba(74,222,128,0.55)', stack: 'a' },
+      { label: 'Saídas', data: saidas.map(v => -v), backgroundColor: 'rgba(248,113,113,0.55)', stack: 'a' },
+      { label: 'Saldo Acumulado', data: saldoAcum, type: 'line', borderColor: '#C9A47A', backgroundColor: 'transparent', pointRadius: 2, tension: 0.3, yAxisID: 'y2', borderWidth: 2 }
+    ]},
+    options: { responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { position: 'bottom', labels: { color: '#B0A898' }}, tooltip: { backgroundColor: '#162032', borderColor: '#243447', borderWidth: 1, titleColor: '#F0EDE8', bodyColor: '#B0A898', callbacks: { label: ctx => ctx.dataset.label + ': ' + fmt(Math.abs(ctx.raw)) }}},
+      scales: {
+        x: { stacked: true, ticks: { maxRotation: 45, font: { size: 10 }, color: '#B0A898' }, grid: { color: '#1E2F45' }},
+        y: { stacked: true, ticks: { callback: v => fmt(v), color: '#B0A898' }, grid: { color: '#1E2F45' }},
+        y2: { position: 'right', grid: { drawOnChartArea: false }, ticks: { callback: v => fmt(v), color: '#C9A47A' }}
+      }}
+  });
+}
+
+function renderInsights(saldo, recv30, pag30) {
+  const box = document.getElementById('insights-box');
+  const t = today();
+  const insights = [];
+  const vencidos = data.filter(r => r.status !== 'pago' && r.vencimento < t);
+  const totalVP = vencidos.filter(r => r.tipo === 'pagar').reduce((s,r)=>s+r.valor,0);
+  const totalVR = vencidos.filter(r => r.tipo === 'receber').reduce((s,r)=>s+r.valor,0);
+  if (totalVP > 0) insights.push({cls:'bad',title:'⚠️ Contas a pagar vencidas',body:`${fmt(totalVP)} em ${vencidos.filter(r=>r.tipo==='pagar').length} lançamento(s) vencido(s).`});
+  if (totalVR > 0) insights.push({cls:'warn',title:'🔔 Recebimentos em atraso',body:`${fmt(totalVR)} em ${vencidos.filter(r=>r.tipo==='receber').length} lançamento(s) não recebido(s).`});
+  const liq = recv30 - pag30;
+  if (liq < 0) insights.push({cls:'bad',title:'📉 Fluxo negativo nos próximos 30 dias',body:`Saídas superam entradas em ${fmt(Math.abs(liq))}. Considere antecipar recebíveis ou postergar pagamentos.`});
+  else if (liq > 0) insights.push({cls:'ok',title:'✅ Fluxo positivo nos próximos 30 dias',body:`Saldo previsto de +${fmt(liq)}. Boa saúde financeira no curto prazo.`});
+  if (saldo + recv30 - pag30 < 0) insights.push({cls:'bad',title:'🚨 Caixa insuficiente previsto',body:`Com saldo atual + entradas − saídas, o caixa fica negativo em ${fmt(Math.abs(saldo+recv30-pag30))}.`});
+  if (insights.length === 0) insights.push({cls:'ok',title:'👍 Nenhum alerta no momento',body:'Adicione lançamentos para obter insights.'});
+  box.innerHTML = insights.map(i=>`<div class="insight ${i.cls}"><strong>${i.title}</strong>${i.body}</div>`).join('');
+}
+
+// ─── BUSSOLA FINANCEIRA (TOC) ─────────────────────────────
+function renderBussola() {
+  document.getElementById('inv-total').value = bussolaState.investimento || '';
+
+  // G = receitas recebidas - CTV pago
+  const receitasPagas = data.filter(r => r.tipo === 'receber' && r.status === 'pago').reduce((s,r)=>s+r.valor,0);
+  const ctvPago = data.filter(r => r.tipo === 'pagar' && r.status === 'pago' && r.toc === 'ctv').reduce((s,r)=>s+r.valor,0);
+  const doPago = data.filter(r => r.tipo === 'pagar' && r.status === 'pago' && r.toc !== 'ctv').reduce((s,r)=>s+r.valor,0);
+
+  // Pendentes próx 30d
+  const t = today(), t30 = addDays(t, 30);
+  const recvPend = data.filter(r => r.tipo === 'receber' && r.status !== 'pago' && r.vencimento >= t && r.vencimento <= t30).reduce((s,r)=>s+r.valor,0);
+  const ctvPend = data.filter(r => r.tipo === 'pagar' && r.status !== 'pago' && r.toc === 'ctv' && r.vencimento >= t && r.vencimento <= t30).reduce((s,r)=>s+r.valor,0);
+  const doPend = data.filter(r => r.tipo === 'pagar' && r.status !== 'pago' && r.toc !== 'ctv' && r.vencimento >= t && r.vencimento <= t30).reduce((s,r)=>s+r.valor,0);
+
+  const G = receitasPagas - ctvPago;
+  const DO = doPago;
+  const LL = G - DO;
+  const inv = bussolaState.investimento;
+  const rsi = inv > 0 ? (LL * 12 / inv * 100) : null; // anualizado assumindo período mensal
+
+  document.getElementById('b-ganho').textContent = fmt(G);
+  document.getElementById('b-do').textContent = fmt(DO);
+  document.getElementById('b-ll').textContent = fmtSgn(LL);
+  document.getElementById('b-card-ll').className = 'card ' + (LL >= 0 ? 'green' : 'red');
+  document.getElementById('b-rsi').textContent = rsi !== null ? rsi.toFixed(1) + '% a.a.' : '—';
+  document.getElementById('b-ctv').textContent = fmt(ctvPago);
+
+  // 3 Perguntas da TOC
+  const G_prev = recvPend - ctvPend;
+  const DO_prev = doPend;
+  const LL_prev = G_prev - DO_prev;
+  document.getElementById('toc-questions').innerHTML = `
+    <div class="toc-q ${G_prev > 0 ? 'up' : G_prev < 0 ? 'down' : 'neutral'}">
+      <div class="q-icon">🟢</div>
+      <div class="q-label">1. O Ganho está aumentando?</div>
+      <div class="q-val">${fmtSgn(G_prev)}</div>
+      <div style="font-size:0.8rem;color:var(--gray);margin-top:4px">Ganho previsto próx. 30d<br>(Receitas − CTV pendentes)</div>
+    </div>
+    <div class="toc-q ${DO_prev <= 0 ? 'up' : 'down'}">
+      <div class="q-icon">🔵</div>
+      <div class="q-label">2. O Investimento / DO está diminuindo?</div>
+      <div class="q-val">${fmt(DO_prev)} em DO</div>
+      <div style="font-size:0.8rem;color:var(--gray);margin-top:4px">DO pendente próx. 30d<br>(Despesas operacionais fixas)</div>
+    </div>
+    <div class="toc-q ${LL_prev > 0 ? 'up' : LL_prev < 0 ? 'down' : 'neutral'}">
+      <div class="q-icon">💡</div>
+      <div class="q-label">3. Lucro Líquido previsto</div>
+      <div class="q-val">${fmtSgn(LL_prev)}</div>
+      <div style="font-size:0.8rem;color:var(--gray);margin-top:4px">G previsto − DO prevista<br>próximos 30 dias</div>
+    </div>`;
+
+  // Bussola insights
+  const ins = [];
+  if (G < DO) ins.push({cls:'bad',title:'📉 Ganho menor que a Despesa Operacional',body:`O Ganho (${fmt(G)}) não cobre a DO (${fmt(DO)}). A empresa está consumindo patrimônio. Segundo a Bússola Financeira, a prioridade é aumentar o Ganho explorando a restrição.`});
+  else if (G > DO) ins.push({cls:'ok',title:'✅ Ganho cobre a Despesa Operacional',body:`Lucro Líquido positivo de ${fmt(LL)}. A empresa está gerando valor. Foco: continuar aumentando o Ganho.`});
+  if (rsi !== null) {
+    if (rsi < 10) ins.push({cls:'warn',title:'⚠️ RSI abaixo de 10% a.a.',body:`RSI de ${rsi.toFixed(1)}% a.a. Avalie se o retorno justifica o investimento.`});
+    else if (rsi >= 20) ins.push({cls:'ok',title:'💰 RSI saudável',body:`RSI de ${rsi.toFixed(1)}% a.a. O investimento está sendo bem remunerado.`});
+  }
+  if (ctvPago === 0 && data.filter(r=>r.tipo==='pagar'&&r.status==='pago').length > 0)
+    ins.push({cls:'info',title:'ℹ️ Classifique seus custos (TOC)',body:`Nenhum custo foi classificado como CTV. Vá à aba "Classificação TOC" abaixo e separe custos variáveis (CTV) dos fixos (DO) para calcular o Ganho com precisão.`});
+  if (ins.length === 0) ins.push({cls:'info',title:'ℹ️ Adicione lançamentos e defina o investimento',body:'Registre receitas e despesas e informe o Investimento total para ativar os indicadores da Bússola Financeira.'});
+  document.getElementById('bussola-insights').innerHTML = ins.map(i=>`<div class="insight ${i.cls}"><strong>${i.title}</strong>${i.body}</div>`).join('');
+
+  // Classification table
+  const pagarItems = data.filter(r => r.tipo === 'pagar');
+  const tb = document.getElementById('tb-class');
+  if (pagarItems.length === 0) {
+    tb.innerHTML = `<tr><td colspan="5" class="empty">Nenhuma conta a pagar registrada.</td></tr>`;
+    return;
+  }
+  tb.innerHTML = pagarItems.map(r => `
+    <tr>
+      <td>${r.descricao}</td>
+      <td><span class="badge pagar">A Pagar</span></td>
+      <td>${fmt(r.valor)}</td>
+      <td>${r.status === 'pago' ? '✅ Pago' : '⏳ Pendente'}</td>
+      <td>
+        <select onchange="setToc('${r.id}', this.value)" style="padding:5px 8px;border:1px solid var(--navy-border);border-radius:6px;font-size:0.82rem;background:var(--surface2);color:var(--text);font-family:Inter,sans-serif">
+          <option value="do" ${r.toc !== 'ctv' ? 'selected' : ''}>DO — Despesa Operacional</option>
+          <option value="ctv" ${r.toc === 'ctv' ? 'selected' : ''}>CTV — Custo Variável</option>
+        </select>
+      </td>
+    </tr>`).join('');
+}
+
+async function setToc(id, val) {
+  const r = data.find(r => r.id === id);
+  if (!r) return;
+  const ok = await _update(id, { toc: val });
+  if (ok) { r.toc = val; renderBussola(); }
+}
+
+// ─── FORM ────────────────────────────────────────────────
+function toggleTocClass() {
+  const isPagar = document.getElementById('f-tipo').value === 'pagar';
+  document.getElementById('toc-class-label').style.display = isPagar ? 'flex' : 'none';
+}
+
+async function addLancamento() {
+  const tipo = document.getElementById('f-tipo').value;
+  const desc = document.getElementById('f-desc').value.trim();
+  const valor = parseFloat(document.getElementById('f-valor').value);
+  const venc = document.getElementById('f-venc').value;
+  const cat = document.getElementById('f-cat').value.trim();
+  const rec = document.getElementById('f-rec').value;
+  const toc = tipo === 'pagar' ? document.getElementById('f-toc').value : 'na';
+  if (!desc) { alert('Informe a descrição.'); return; }
+  if (!valor || valor <= 0) { alert('Informe um valor válido.'); return; }
+  if (!venc) { alert('Informe o vencimento.'); return; }
+  const base = { tipo, descricao: desc, valor, vencimento: venc, categoria: cat || null, status: 'pendente', recorrencia: rec, toc };
+  const items = [{ ...base }];
+  if (rec !== 'none') {
+    const steps = { semanal:7, quinzenal:15, mensal:30 };
+    for (let i = 1; i <= 11; i++) items.push({ ...base, vencimento: addDays(venc, steps[rec]*i) });
+  }
+  const { data: rows, error } = await sb.from('lancamentos').insert(items).select();
+  if (error) { showSync('Erro ao salvar ✗', true); return; }
+  data.push(...(rows||[]));
+  showSync(`${rows.length} lançamento(s) adicionado(s) ✓`);
+  clearForm(); renderTable(); refreshAll();
+}
+
+function clearForm() {
+  ['f-desc','f-valor','f-venc','f-cat'].forEach(id => document.getElementById(id).value = '');
+  document.getElementById('f-tipo').value = 'receber';
+  document.getElementById('f-rec').value = 'none';
+  document.getElementById('f-toc').value = 'do';
+  toggleTocClass();
+}
+
+// ─── TABLE ───────────────────────────────────────────────
+function renderTable() {
+  const fil = document.getElementById('fil-tipo').value;
+  const filS = document.getElementById('fil-status').value;
+  const busca = document.getElementById('fil-busca').value.toLowerCase();
+  const t = today();
+  const rows = data.filter(r => {
+    if (fil && r.tipo !== fil) return false;
+    if (filS && r.status !== filS) return false;
+    if (busca && !r.descricao.toLowerCase().includes(busca) && !(r.categoria||'').toLowerCase().includes(busca)) return false;
+    return true;
+  }).sort((a,b) => (a.vencimento||'') < (b.vencimento||'') ? -1 : 1);
+
+  const tb = document.getElementById('tb-body');
+  if (rows.length === 0) { tb.innerHTML = `<tr><td colspan="8" class="empty">Nenhum lançamento encontrado.</td></tr>`; return; }
+  tb.innerHTML = rows.map(r => {
+    const vencido = r.vencimento < t && r.status !== 'pago';
+    const tocBadge = r.tipo === 'pagar' ? `<span class="badge ${r.toc||'do'}">${r.toc === 'ctv' ? 'CTV' : 'DO'}</span>` : '—';
+    return `<tr class="${r.status==='pago'?'row-paid':''}">
+      <td><span class="badge ${r.tipo}">${r.tipo==='receber'?'Receber':'Pagar'}</span></td>
+      <td>${r.descricao}${r.recorrencia&&r.recorrencia!=='none'?` <span class="tag-status">↻${r.recorrencia}</span>`:''}</td>
+      <td>${r.categoria||'—'}</td>
+      <td style="${vencido?'color:var(--red);font-weight:600':''}">${fmtDate(r.vencimento)}</td>
+      <td>${fmt(r.valor)}</td>
+      <td>${tocBadge}</td>
+      <td><button onclick="toggleStatus('${r.id}')" style="background:none;border:none;cursor:pointer;font-size:0.82rem;color:var(--text2);font-family:Inter,sans-serif">${r.status==='pago'?'✅ Pago':'⏳ Pendente'}</button></td>
+      <td><button class="btn btn-danger" onclick="removeItem('${r.id}')">✕</button></td>
+    </tr>`;
+  }).join('');
+}
+
+async function toggleStatus(id) {
+  const r = data.find(r => r.id === id);
+  if (!r) return;
+  const newStatus = r.status === 'pago' ? 'pendente' : 'pago';
+  const ok = await _update(id, { status: newStatus });
+  if (ok) { r.status = newStatus; renderTable(); renderDashboard(); }
+}
+async function removeItem(id) {
+  if (!confirm('Remover este lançamento?')) return;
+  const ok = await _delete(id);
+  if (ok) { data = data.filter(r => r.id !== id); renderTable(); refreshAll(); }
+}
+
+// ─── PREVISÃO ────────────────────────────────────────────
+function renderPrevisao() {
+  const now = new Date();
+  const months = Array.from({length:6}, (_,i) => {
+    const d = new Date(now.getFullYear(), now.getMonth()+i, 1);
+    return d.toISOString().slice(0,7);
+  });
+  let acum = 0;
+  data.filter(r=>r.status==='pago').forEach(r => { acum += r.tipo==='receber'?r.valor:-r.valor; });
+  const rows = months.map(mk => {
+    const ent = data.filter(r=>r.status!=='pago'&&r.vencimento&&r.vencimento.startsWith(mk)&&r.tipo==='receber').reduce((s,r)=>s+r.valor,0);
+    const sai = data.filter(r=>r.status!=='pago'&&r.vencimento&&r.vencimento.startsWith(mk)&&r.tipo==='pagar').reduce((s,r)=>s+r.valor,0);
+    const liq = ent-sai; acum += liq;
+    return {mk,ent,sai,liq,acum};
+  });
+  const labels = rows.map(r => { const [y,m] = r.mk.split('-'); return ['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'][+m-1]+'/'+y.slice(2); });
+  if (chartPrevisao) chartPrevisao.destroy();
+  chartPrevisao = new Chart(document.getElementById('chartPrevisao'), {
+    type: 'bar',
+    data: { labels, datasets: [
+      { label: 'Entradas', data: rows.map(r=>r.ent), backgroundColor: 'rgba(74,222,128,0.55)' },
+      { label: 'Saídas', data: rows.map(r=>r.sai), backgroundColor: 'rgba(248,113,113,0.55)' },
+      { label: 'Saldo Acum.', data: rows.map(r=>r.acum), type: 'line', borderColor: '#C9A47A', borderWidth: 2, backgroundColor: 'transparent', tension: 0.3 }
+    ]},
+    options: { responsive:true, maintainAspectRatio:false,
+      plugins:{ legend:{position:'bottom', labels:{color:'#B0A898'}}, tooltip:{backgroundColor:'#162032',borderColor:'#243447',borderWidth:1,titleColor:'#F0EDE8',bodyColor:'#B0A898',callbacks:{label:ctx=>ctx.dataset.label+': '+fmt(ctx.raw)}}},
+      scales:{y:{ticks:{callback:v=>fmt(v),color:'#B0A898'},grid:{color:'#1E2F45'}},x:{ticks:{color:'#B0A898'},grid:{color:'#1E2F45'}}}
+    }
+  });
+  document.getElementById('tb-forecast').innerHTML = rows.map((r,i) => `
+    <tr>
+      <td>${labels[i]}</td>
+      <td class="pos">${fmt(r.ent)}</td>
+      <td class="neg">${fmt(r.sai)}</td>
+      <td class="${r.liq>=0?'pos':'neg'}">${fmtSgn(r.liq)}</td>
+      <td class="${r.acum>=0?'pos':'neg'}">${fmtSgn(r.acum)}</td>
+    </tr>`).join('');
+}
+
+// ─── IMPORT ──────────────────────────────────────────────
+function handleDrop(e) { e.preventDefault(); document.getElementById('drop-area').classList.remove('drag'); handleFile(e.dataTransfer.files[0]); }
+function handleFile(file) { if(!file) return; const r = new FileReader(); r.onload = e => parseCSV(e.target.result); r.readAsText(file,'UTF-8'); }
+function parseCSV(text) {
+  const lines = text.trim().split(/\r?\n/);
+  if (lines.length < 2) { alert('Arquivo vazio.'); return; }
+  const sep = lines[0].includes(';') ? ';' : ',';
+  const headers = lines[0].split(sep).map(h => h.trim().toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,''));
+  const col = k => { const alts = {tipo:['tipo','type'],descricao:['descricao','descrição','desc','description'],valor:['valor','value','amount'],vencimento:['vencimento','data','due','due_date'],categoria:['categoria','category','cat'],toc:['toc','classificacao','class']}; for(const a of (alts[k]||[k])){ const i=headers.indexOf(a); if(i>=0) return i; } return -1; };
+  const ci = {tipo:col('tipo'),desc:col('descricao'),valor:col('valor'),venc:col('vencimento'),cat:col('categoria'),toc:col('toc')};
+  if (ci.tipo<0||ci.desc<0||ci.valor<0||ci.venc<0) { alert('Colunas obrigatórias não encontradas: tipo, descricao, valor, vencimento'); return; }
+  pendingImport = [];
+  for (let i=1;i<lines.length;i++) {
+    if (!lines[i].trim()) continue;
+    const c = lines[i].split(sep);
+    const tipo = (c[ci.tipo]||'').trim().toLowerCase();
+    const desc = (c[ci.desc]||'').trim();
+    const valor = parseFloat((c[ci.valor]||'0').replace(',','.').replace(/[^\d.]/g,''));
+    let venc = (c[ci.venc]||'').trim();
+    if (/\d{2}\/\d{2}\/\d{4}/.test(venc)) venc = venc.split('/').reverse().join('-');
+    const cat = ci.cat>=0?(c[ci.cat]||'').trim():'';
+    const toc = ci.toc>=0?(c[ci.toc]||'do').trim().toLowerCase():'do';
+    if (!['pagar','receber'].includes(tipo)||!desc||!valor||!venc) continue;
+    pendingImport.push({id:uid(),tipo,descricao:desc,valor,vencimento:venc,categoria:cat,status:'pendente',recorrencia:'none',toc});
+  }
+  if (!pendingImport.length) { alert('Nenhum registro válido.'); return; }
+  document.getElementById('import-result').style.display='block';
+  document.getElementById('import-msg').textContent = `${pendingImport.length} registro(s) encontrado(s). Revise e confirme:`;
+  const tbl = document.getElementById('import-preview');
+  tbl.querySelector('thead').innerHTML='<tr><th>Tipo</th><th>Descrição</th><th>Vencimento</th><th>Valor</th><th>TOC</th></tr>';
+  tbl.querySelector('tbody').innerHTML = pendingImport.slice(0,20).map(r =>
+    `<tr><td><span class="badge ${r.tipo}">${r.tipo}</span></td><td>${r.descricao}</td><td>${fmtDate(r.vencimento)}</td><td>${fmt(r.valor)}</td><td><span class="badge ${r.toc}">${r.toc.toUpperCase()}</span></td></tr>`
+  ).join('') + (pendingImport.length>20?`<tr><td colspan="5" class="empty">...e mais ${pendingImport.length-20} registros</td></tr>`:'');
+}
+async function confirmImport() {
+  const toInsert = pendingImport.map(({ id: _ignore, ...rest }) => rest);
+  const { data: rows, error } = await sb.from('lancamentos').insert(toInsert).select();
+  if (error) { showSync('Erro ao importar ✗', true); return; }
+  data.push(...(rows||[]));
+  showSync(`${rows.length} lançamentos importados ✓`);
+  cancelImport(); pendingImport = [];
+  renderTable(); refreshAll();
+}
+function cancelImport() { document.getElementById('import-result').style.display='none'; document.getElementById('file-input').value=''; }
+function downloadTemplate() {
+  const csv='tipo,descricao,valor,vencimento,categoria,toc\nreceber,Venda produto A,1500.00,01/07/2026,Vendas,na\npagar,Aluguel,2000.00,05/07/2026,Infraestrutura,do\npagar,Matéria-prima,800.00,10/07/2026,Produção,ctv\n';
+  const a=document.createElement('a'); a.href='data:text/csv;charset=utf-8,'+encodeURIComponent(csv); a.download='modelo-bussola-financeira.csv'; a.click();
+}
+
+// ─── INIT ────────────────────────────────────────────────
+document.getElementById('f-venc').value = today();
+toggleTocClass();
+loadData(); // carrega do Supabase na inicialização
+
+function refreshAll() {
+  renderDashboard();
+  renderTable();
+  if (document.getElementById('tab-bussola').classList.contains('active')) renderBussola();
+  if (document.getElementById('tab-previsao').classList.contains('active')) renderPrevisao();
+}
+</script>
+</body>
+</html>
