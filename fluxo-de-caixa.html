@@ -185,27 +185,6 @@
     .tab { margin: 0 12px 24px; padding: 16px; }
   }
 </style>
-  .toc-formula span { font-weight: 700; }
-  .toc-questions { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px; margin-bottom: 24px; }
-  .toc-q { border: 2px solid var(--border); border-radius: 10px; padding: 14px; }
-  .toc-q .q-icon { font-size: 1.5rem; margin-bottom: 6px; }
-  .toc-q .q-label { font-size: 0.75rem; color: var(--gray); text-transform: uppercase; font-weight: 600; letter-spacing: 0.05em; }
-  .toc-q .q-val { font-size: 1.2rem; font-weight: 700; margin-top: 4px; }
-  .toc-q.up { border-color: #86efac; background: var(--green-light); }
-  .toc-q.up .q-val { color: var(--green); }
-  .toc-q.down { border-color: #fca5a5; background: var(--red-light); }
-  .toc-q.down .q-val { color: var(--red); }
-  .toc-q.neutral { border-color: #93c5fd; background: var(--blue-light); }
-  .toc-q.neutral .q-val { color: var(--blue); }
-  .invest-row { display: flex; gap: 12px; align-items: flex-end; margin-bottom: 24px; flex-wrap: wrap; }
-  .invest-row label { font-size: 0.82rem; color: var(--gray); display: flex; flex-direction: column; gap: 4px; }
-  .invest-row input { padding: 8px 10px; border: 1px solid var(--border); border-radius: 6px; font-size: 0.9rem; width: 200px; }
-
-  @media (max-width: 600px) {
-    nav { padding: 16px 12px 0; }
-    .tab { margin: 0 12px 24px; padding: 16px; }
-  }
-</style>
 </head>
 <body>
 
@@ -407,8 +386,8 @@
 // ══════════════════════════════════════════════
 // ⚙️  CONFIGURAÇÃO SUPABASE — cole suas credenciais
 // ══════════════════════════════════════════════
-const SUPABASE_URL = 'https://ijbzdhpfhusckvoecdjw.supabase.co/rest/v1/';
-const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImlqYnpkaHBmaHVzY2t2b2VjZGp3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODAzMzcxNDMsImV4cCI6MjA5NTkxMzE0M30.pA5oq1SojiRk514PCVq5IRmCSwHSvU0htFBcwwqvmtU';
+const SUPABASE_URL = 'COLE_SUA_URL_AQUI';
+const SUPABASE_KEY = 'COLE_SUA_ANON_KEY_AQUI';
 // ══════════════════════════════════════════════
 
 const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
