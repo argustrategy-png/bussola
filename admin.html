@@ -3,13 +3,13 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Admin — Bússola Financeira</title>
+<title>Admin — MeuArgus</title>
 <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@600;700&family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; }
   :root {
-    --gold:#C9A47A; --gold-dark:#9A7A54; --navy:#0D1B2E; --navy-mid:#162032;
+    --gold:#2563EB; --gold-dark:#1D4ED8; --navy:#0D1B2E; --navy-mid:#162032;
     --navy-light:#1E2F45; --navy-border:#243447;
     --green:#4ADE80; --green-dim:rgba(74,222,128,0.12);
     --red:#F87171;   --red-dim:rgba(248,113,113,0.12);
@@ -22,7 +22,7 @@
 
   /* ── LOGIN ── */
   #login-screen { min-height:100vh; display:flex; align-items:center; justify-content:center;
-    background:radial-gradient(ellipse at 30% 40%,rgba(201,164,122,.08) 0%,transparent 60%),var(--navy); }
+    background:radial-gradient(ellipse at 30% 40%,rgba(37,99,235,.08) 0%,transparent 60%),var(--navy); }
   .login-box { background:var(--surface); border:1px solid var(--gold-dark); border-radius:16px;
     padding:48px 40px; width:100%; max-width:380px; text-align:center; }
   .login-box .logo { font-size:2.5rem; margin-bottom:12px; }
@@ -42,14 +42,14 @@
 
   /* ── APP ── */
   #app { display:none; }
-  header { background:linear-gradient(180deg,#0A1624 0%,var(--navy) 100%);
+  header { background:linear-gradient(180deg,#030D1A 0%,var(--navy) 100%);
     border-bottom:1px solid var(--gold-dark); padding:16px 28px;
     display:flex; align-items:center; justify-content:space-between; }
   .hd-left { display:flex; align-items:center; gap:14px; }
   .logo-mark { width:34px; height:34px; background:linear-gradient(135deg,var(--gold),var(--gold-dark));
     border-radius:8px; display:flex; align-items:center; justify-content:center; font-size:1rem; }
   header h1 { font-family:'Playfair Display',serif; font-size:1.1rem; color:var(--gold); }
-  .badge-admin { background:rgba(201,164,122,.15); border:1px solid var(--gold-dark); color:var(--gold);
+  .badge-admin { background:rgba(37,99,235,.15); border:1px solid var(--gold-dark); color:var(--gold);
     font-size:.68rem; padding:2px 10px; border-radius:999px; text-transform:uppercase; letter-spacing:.1em; }
   .btn-logout { background:none; border:1px solid var(--border); color:var(--text2); padding:6px 14px;
     border-radius:7px; cursor:pointer; font-size:.8rem; font-family:'Inter',sans-serif; transition:all .2s; }
@@ -102,7 +102,7 @@
     font-family:'Inter',sans-serif; font-weight:500; }
   .btn-edit   { background:var(--blue-dim); color:var(--blue); border:1px solid rgba(147,197,253,.2); }
   .btn-delete { background:var(--red-dim);  color:var(--red);  border:1px solid rgba(248,113,113,.2); }
-  .btn-view   { background:rgba(201,164,122,.12); color:var(--gold); border:1px solid rgba(201,164,122,.2); }
+  .btn-view   { background:rgba(37,99,235,.12); color:var(--gold); border:1px solid rgba(37,99,235,.2); }
 
   /* Table */
   .table-card { background:var(--surface); border:1px solid var(--border); border-radius:12px; overflow:hidden; }
@@ -139,7 +139,7 @@
   .plan-badge { display:inline-block; padding:2px 9px; border-radius:5px; font-size:.72rem; font-weight:600; }
   .plan-free    { background:rgba(148,163,184,.1); color:#94A3B8; }
   .plan-pro     { background:var(--blue-dim); color:var(--blue); }
-  .plan-premium { background:rgba(201,164,122,.15); color:var(--gold); border:1px solid rgba(201,164,122,.2); }
+  .plan-premium { background:rgba(37,99,235,.15); color:var(--gold); border:1px solid rgba(37,99,235,.2); }
 
   /* Pagination */
   .pagination { display:flex; gap:6px; align-items:center; justify-content:flex-end;
@@ -209,7 +209,7 @@
 <div id="login-screen">
   <div class="login-box">
     <div class="logo">🧭</div>
-    <h1>Bússola Financeira</h1>
+    <h1>MeuArgus</h1>
     <p>Acesso Administrativo</p>
     <div class="login-field">
       <label>Usuário</label>
@@ -230,7 +230,7 @@
   <header>
     <div class="hd-left">
       <div class="logo-mark">🧭</div>
-      <h1>Bússola Financeira</h1>
+      <h1>MeuArgus</h1>
       <span class="badge-admin">Admin</span>
     </div>
     <div style="display:flex;align-items:center;gap:12px">
@@ -363,11 +363,11 @@
 // ══════════════════════════════════════════════
 // ⚙️  CONFIGURAÇÃO — cole suas credenciais aqui
 // ══════════════════════════════════════════════
-const SUPABASE_URL  = 'https://ijbzdhpfhusckvoecdjw.supabase.co/rest/v1/';       // Ex: https://xyzxyz.supabase.co
-const SUPABASE_KEY  = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImlqYnpkaHBmaHVzY2t2b2VjZGp3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODAzMzcxNDMsImV4cCI6MjA5NTkxMzE0M30.pA5oq1SojiRk514PCVq5IRmCSwHSvU0htFBcwwqvmtU';  // Project Settings → API → anon public
+const SUPABASE_URL  = 'COLE_SUA_URL_AQUI';       // Ex: https://xyzxyz.supabase.co
+const SUPABASE_KEY  = 'COLE_SUA_ANON_KEY_AQUI';  // Project Settings → API → anon public
 
 // Credenciais de acesso admin (mude antes de publicar!)
-const CREDENTIALS = { admin: 'Joehoo@252020' };
+const CREDENTIALS = { admin: 'meuargus2024' };
 // ══════════════════════════════════════════════
 
 const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);

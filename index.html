@@ -11,14 +11,14 @@
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; }
   :root {
-    /* Itaú Personnalité palette */
-    --gold:        #C9A47A;
-    --gold-light:  #F5E8D4;
-    --gold-dark:   #9A7A54;
-    --navy:        #0D1B2E;
-    --navy-mid:    #162032;
-    --navy-light:  #1E2F45;
-    --navy-border: #243447;
+    /* MeuArgus palette */
+    --gold:        #2563EB;
+    --gold-light:  #DBEAFE;
+    --gold-dark:   #1D4ED8;
+    --navy:        #05101E;
+    --navy-mid:    #0A1628;
+    --navy-light:  #102036;
+    --navy-border: #1B3154;
     --green:       #4ADE80;
     --green-dim:   rgba(74,222,128,0.12);
     --red:         #F87171;
@@ -26,17 +26,17 @@
     --amber:       #FBBF24;
     --amber-dim:   rgba(251,191,36,0.12);
     --blue-dim:    rgba(147,197,253,0.12);
-    --text:        #F0EDE8;
-    --text2:       #B0A898;
+    --text:        #FFFFFF;
+    --text2:       #7B9DC0;
     --bg:          #0D1B2E;
-    --border:      #243447;
-    --surface:     #162032;
-    --surface2:    #1E2F45;
+    --border:      #1B3154;
+    --surface:     #0A1628;
+    --surface2:    #102036;
   }
   body { font-family: 'Inter', system-ui, sans-serif; background: var(--navy); color: var(--text); min-height: 100vh; }
 
   header {
-    background: linear-gradient(180deg, #0A1624 0%, var(--navy) 100%);
+    background: linear-gradient(180deg, #030D1A 0%, var(--navy) 100%);
     border-bottom: 1px solid var(--gold-dark);
     padding: 18px 24px;
     display: flex; align-items: center; gap: 16px;
@@ -74,7 +74,7 @@
   .card.purple .val { color: #C4B5FD; }
   .card.amber { border-color: rgba(251,191,36,0.3); background: var(--amber-dim); }
   .card.amber .val { color: var(--amber); }
-  .card.gold { border-color: var(--gold-dark); background: rgba(201,164,122,0.1); }
+  .card.gold { border-color: var(--gold-dark); background: rgba(37,99,235,0.1); }
   .card.gold .val { color: var(--gold); }
 
   /* Chart */
@@ -139,14 +139,14 @@
 
   /* Bussola */
   .bussola-hero {
-    background: linear-gradient(135deg, #0A1624 0%, #162032 60%, #1a2a1a 100%);
+    background: linear-gradient(135deg, #030D1A 0%, #162032 60%, #1a2a1a 100%);
     border: 1px solid var(--gold-dark); border-radius: 12px; padding: 24px 28px; margin-bottom: 24px;
     position: relative; overflow: hidden;
   }
   .bussola-hero::before {
     content: ''; position: absolute; top: -40px; right: -40px;
     width: 160px; height: 160px;
-    background: radial-gradient(circle, rgba(201,164,122,0.15) 0%, transparent 70%);
+    background: radial-gradient(circle, rgba(37,99,235,0.15) 0%, transparent 70%);
     pointer-events: none;
   }
   .bussola-hero h2 { font-family: 'Playfair Display', serif; font-size: 1.15rem; margin-bottom: 6px; color: var(--gold); }
@@ -163,7 +163,7 @@
   .toc-q.up .q-val { color: var(--green); }
   .toc-q.down { border-color: rgba(248,113,113,0.3); background: var(--red-dim); }
   .toc-q.down .q-val { color: var(--red); }
-  .toc-q.neutral { border-color: rgba(201,164,122,0.3); background: rgba(201,164,122,0.08); }
+  .toc-q.neutral { border-color: rgba(37,99,235,0.3); background: rgba(37,99,235,0.08); }
   .toc-q.neutral .q-val { color: var(--gold); }
 
   .invest-row { display: flex; gap: 12px; align-items: flex-end; margin-bottom: 24px; flex-wrap: wrap; }
@@ -191,8 +191,8 @@
 <header>
   <div class="logo-mark">🧭</div>
   <div>
-    <h1>Bússola Financeira</h1>
-    <span id="hd-subtitle">Gestão de Fluxo de Caixa · TOC · Personnalité</span>
+    <h1>MeuArgus</h1>
+    <span id="hd-subtitle"></span>
   </div>
 </header>
 
@@ -523,14 +523,14 @@ function renderChartFluxo() {
     data: { labels, datasets: [
       { label: 'Entradas', data: entradas, backgroundColor: 'rgba(74,222,128,0.55)', stack: 'a' },
       { label: 'Saídas', data: saidas.map(v => -v), backgroundColor: 'rgba(248,113,113,0.55)', stack: 'a' },
-      { label: 'Saldo Acumulado', data: saldoAcum, type: 'line', borderColor: '#C9A47A', backgroundColor: 'transparent', pointRadius: 2, tension: 0.3, yAxisID: 'y2', borderWidth: 2 }
+      { label: 'Saldo Acumulado', data: saldoAcum, type: 'line', borderColor: '#2563EB', backgroundColor: 'transparent', pointRadius: 2, tension: 0.3, yAxisID: 'y2', borderWidth: 2 }
     ]},
     options: { responsive: true, maintainAspectRatio: false,
       plugins: { legend: { position: 'bottom', labels: { color: '#B0A898' }}, tooltip: { backgroundColor: '#162032', borderColor: '#243447', borderWidth: 1, titleColor: '#F0EDE8', bodyColor: '#B0A898', callbacks: { label: ctx => ctx.dataset.label + ': ' + fmt(Math.abs(ctx.raw)) }}},
       scales: {
         x: { stacked: true, ticks: { maxRotation: 45, font: { size: 10 }, color: '#B0A898' }, grid: { color: '#1E2F45' }},
         y: { stacked: true, ticks: { callback: v => fmt(v), color: '#B0A898' }, grid: { color: '#1E2F45' }},
-        y2: { position: 'right', grid: { drawOnChartArea: false }, ticks: { callback: v => fmt(v), color: '#C9A47A' }}
+        y2: { position: 'right', grid: { drawOnChartArea: false }, ticks: { callback: v => fmt(v), color: '#2563EB' }}
       }}
   });
 }
@@ -750,7 +750,7 @@ function renderPrevisao() {
     data: { labels, datasets: [
       { label: 'Entradas', data: rows.map(r=>r.ent), backgroundColor: 'rgba(74,222,128,0.55)' },
       { label: 'Saídas', data: rows.map(r=>r.sai), backgroundColor: 'rgba(248,113,113,0.55)' },
-      { label: 'Saldo Acum.', data: rows.map(r=>r.acum), type: 'line', borderColor: '#C9A47A', borderWidth: 2, backgroundColor: 'transparent', tension: 0.3 }
+      { label: 'Saldo Acum.', data: rows.map(r=>r.acum), type: 'line', borderColor: '#2563EB', borderWidth: 2, backgroundColor: 'transparent', tension: 0.3 }
     ]},
     options: { responsive:true, maintainAspectRatio:false,
       plugins:{ legend:{position:'bottom', labels:{color:'#B0A898'}}, tooltip:{backgroundColor:'#162032',borderColor:'#243447',borderWidth:1,titleColor:'#F0EDE8',bodyColor:'#B0A898',callbacks:{label:ctx=>ctx.dataset.label+': '+fmt(ctx.raw)}}},
