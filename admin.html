@@ -9,6 +9,16 @@
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; }
   :root {
+    --gold:#2563EB; --gold-dark:#1D4ED8; --navy:#F5F7FA; --navy-mid:#FFFFFF;
+    --navy-light:#F1F4F8; --navy-border:#E2E8F0;
+    --green:#16A34A; --green-dim:#DCFCE7;
+    --red:#DC2626;   --red-dim:#FEE2E2;
+    --amber:#C2760C; --amber-dim:#FEF3C7;
+    --blue:#1D4ED8;  --blue-dim:#DBEAFE;
+    --text:#16202B;  --text2:#64748B;
+    --surface:#FFFFFF; --surface2:#F1F4F8; --border:#E2E8F0;
+  }
+  html[data-theme="dark"] {
     --gold:#2563EB; --gold-dark:#1D4ED8; --navy:#0D1B2E; --navy-mid:#162032;
     --navy-light:#1E2F45; --navy-border:#243447;
     --green:#4ADE80; --green-dim:rgba(74,222,128,0.12);
@@ -18,11 +28,13 @@
     --text:#F0EDE8;  --text2:#B0A898;
     --surface:#162032; --surface2:#1E2F45; --border:#243447;
   }
-  body { font-family:'Inter',sans-serif; background:var(--navy); color:var(--text); min-height:100vh; }
+  body { font-family:'Inter',sans-serif; background:var(--navy); color:var(--text); min-height:100vh; transition: background .2s, color .2s; }
+  .theme-toggle { background: var(--surface2); border: 1px solid var(--border); color: var(--text); width: 34px; height: 34px; border-radius: 8px; cursor: pointer; font-size: 1rem; display:flex; align-items:center; justify-content:center; }
 
   /* ── LOGIN ── */
-  #login-screen { min-height:100vh; display:flex; align-items:center; justify-content:center;
+  #login-screen { min-height:100vh; display:flex; align-items:center; justify-content:center; position:relative;
     background:radial-gradient(ellipse at 30% 40%,rgba(37,99,235,.08) 0%,transparent 60%),var(--navy); }
+  .login-theme-toggle { position:fixed; top:18px; right:18px; }
   .login-box { background:var(--surface); border:1px solid var(--gold-dark); border-radius:16px;
     padding:48px 40px; width:100%; max-width:380px; text-align:center; }
   .login-box .logo { font-size:2.5rem; margin-bottom:12px; }
@@ -42,9 +54,9 @@
 
   /* ── APP ── */
   #app { display:none; }
-  header { background:linear-gradient(180deg,#030D1A 0%,var(--navy) 100%);
-    border-bottom:1px solid var(--gold-dark); padding:16px 28px;
-    display:flex; align-items:center; justify-content:space-between; }
+  header { background:var(--surface);
+    border-bottom:1px solid var(--border); padding:16px 28px;
+    display:flex; align-items:center; justify-content:space-between; box-shadow: 0 1px 2px rgba(16,24,40,.04); }
   .hd-left { display:flex; align-items:center; gap:14px; }
   .logo-mark { width:34px; height:34px; background:linear-gradient(135deg,var(--gold),var(--gold-dark));
     border-radius:8px; display:flex; align-items:center; justify-content:center; font-size:1rem; }
@@ -207,6 +219,7 @@
 
 <!-- ══ LOGIN ══ -->
 <div id="login-screen">
+  <button class="theme-toggle login-theme-toggle" onclick="toggleTheme()" id="theme-toggle-login">🌙</button>
   <div class="login-box">
     <div class="logo">🧭</div>
     <h1>MeuArgus</h1>
@@ -235,6 +248,7 @@
     </div>
     <div style="display:flex;align-items:center;gap:12px">
       <span style="font-size:.8rem;color:var(--text2)" id="admin-name"></span>
+      <button class="theme-toggle" onclick="toggleTheme()" id="theme-toggle-app">🌙</button>
       <button class="btn-logout" onclick="doLogout()">Sair</button>
     </div>
   </header>
@@ -367,6 +381,24 @@ const SUPABASE_KEY  = 'sb_publishable_hJhexGzbi1soGSnlXwgQMA_wkQG9_yk';
 // ══════════════════════════════════════════════
 
 const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
+// ── TEMA ─────────────────────────────────────
+function applyTheme(mode) {
+  document.documentElement.setAttribute('data-theme', mode);
+  const icon = mode === 'dark' ? '☀️' : '🌙';
+  const l = document.getElementById('theme-toggle-login'); if (l) l.textContent = icon;
+  const a = document.getElementById('theme-toggle-app');   if (a) a.textContent = icon;
+}
+function toggleTheme() {
+  const cur = document.documentElement.getAttribute('data-theme') === 'dark' ? 'dark' : 'light';
+  const next = cur === 'dark' ? 'light' : 'dark';
+  localStorage.setItem('meuargus_theme', next);
+  applyTheme(next);
+}
+(function initTheme() {
+  const saved = localStorage.getItem('meuargus_theme');
+  applyTheme(saved === 'dark' ? 'dark' : 'light');
+})();
 
 // ── UTILS ────────────────────────────────────
 function showLoading(v) { document.getElementById('loading').style.display = v ? 'flex' : 'none'; }
@@ -618,7 +650,7 @@ function exportCSV() {
     .map(v=>`"${(v||'').replace(/"/g,'""')}"`).join(','));
   const a = document.createElement('a');
   a.href = 'data:text/csv;charset=utf-8,' + encodeURIComponent([head,...rows].join('\n'));
-  a.download = 'assinantes-bussola.csv'; a.click();
+  a.download = 'assinantes-meuargus.csv'; a.click();
 }
 
 // Close on bg click

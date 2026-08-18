@@ -43,6 +43,9 @@ create table public.lancamentos (
   status        text not null default 'pendente' check (status in ('pendente','pago')),
   recorrencia   text default 'none',
   toc           text default 'do',
+  origem        text not null default 'manual' check (origem in ('manual','importado','erp')),
+  contraparte   text,
+  contraparte_telefone text,
   created_at    timestamptz default now()
 );
 
@@ -56,7 +59,7 @@ begin
   insert into public.subscribers (id, nome, email, plano, status)
   values (
     new.id,
-    coalesce(new.raw_user_meta_data->>'nome', split_part(new.email, '@', 1)),
+    coalesce(new.raw_user_meta_data->>'nome', new.raw_user_meta_data->>'full_name', new.raw_user_meta_data->>'name', split_part(new.email, '@', 1)),
     new.email,
     'free',
     'trial'
@@ -114,6 +117,7 @@ create index idx_lancamentos_subscriber on public.lancamentos(subscriber_id);
 create index idx_lancamentos_tipo       on public.lancamentos(tipo);
 create index idx_lancamentos_status     on public.lancamentos(status);
 create index idx_lancamentos_venc       on public.lancamentos(vencimento);
+create index idx_lancamentos_contraparte on public.lancamentos(contraparte);
 
 -- ============================================================
 -- PÓS-INSTALAÇÃO (fazer manualmente, uma vez):

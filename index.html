@@ -10,175 +10,166 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  /* ══ TEMA CLARO (padrão) ══ */
   :root {
-    /* MeuArgus palette */
-    --gold:        #2563EB;
-    --gold-light:  #DBEAFE;
-    --gold-dark:   #1D4ED8;
-    --navy:        #05101E;
-    --navy-mid:    #0A1628;
-    --navy-light:  #102036;
-    --navy-border: #1B3154;
-    --green:       #4ADE80;
-    --green-dim:   rgba(74,222,128,0.12);
-    --red:         #F87171;
-    --red-dim:     rgba(248,113,113,0.12);
-    --amber:       #FBBF24;
-    --amber-dim:   rgba(251,191,36,0.12);
-    --blue-dim:    rgba(147,197,253,0.12);
-    --text:        #FFFFFF;
-    --text2:       #7B9DC0;
-    --bg:          #0D1B2E;
-    --border:      #1B3154;
-    --surface:     #0A1628;
-    --surface2:    #102036;
+    --accent:       #2563EB;
+    --accent-light: #DBEAFE;
+    --accent-dark:  #1D4ED8;
+    --bg:           #F5F7FA;
+    --surface:      #FFFFFF;
+    --surface2:     #F1F4F8;
+    --border:       #E2E8F0;
+    --text:         #16202B;
+    --text2:        #64748B;
+    --green:        #16A34A;  --green-dim:  #DCFCE7; --green-border: rgba(22,163,74,.25);
+    --red:          #DC2626;  --red-dim:    #FEE2E2; --red-border:   rgba(220,38,38,.25);
+    --amber:        #C2760C;  --amber-dim:  #FEF3C7; --amber-border: rgba(194,118,12,.3);
+    --blue-dim:     #DBEAFE;  --blue-text:  #1D4ED8;
+    --purple-dim:   #EDE9FE;  --purple-text:#6D28D9;
+    --shadow: 0 1px 2px rgba(16,24,40,.04), 0 1px 3px rgba(16,24,40,.06);
   }
-  body { font-family: 'Inter', system-ui, sans-serif; background: var(--navy); color: var(--text); min-height: 100vh; }
+  /* ══ TEMA ESCURO ══ */
+  html[data-theme="dark"] {
+    --accent:       #3B82F6;
+    --accent-light: #1E3A8A;
+    --accent-dark:  #60A5FA;
+    --bg:           #05101E;
+    --surface:      #0A1628;
+    --surface2:     #102036;
+    --border:       #1B3154;
+    --text:         #FFFFFF;
+    --text2:        #7B9DC0;
+    --green:        #4ADE80;  --green-dim:  rgba(74,222,128,.12); --green-border: rgba(74,222,128,.3);
+    --red:          #F87171;  --red-dim:    rgba(248,113,113,.12); --red-border: rgba(248,113,113,.3);
+    --amber:        #FBBF24;  --amber-dim:  rgba(251,191,36,.12); --amber-border: rgba(251,191,36,.3);
+    --blue-dim:     rgba(147,197,253,.12); --blue-text:#93C5FD;
+    --purple-dim:   rgba(196,181,253,.12); --purple-text:#C4B5FD;
+    --shadow: 0 1px 2px rgba(0,0,0,.3);
+  }
+
+  body { font-family: 'Inter', system-ui, sans-serif; background: var(--bg); color: var(--text); min-height: 100vh; transition: background .2s, color .2s; }
 
   header {
-    background: linear-gradient(180deg, #030D1A 0%, var(--navy) 100%);
-    border-bottom: 1px solid var(--gold-dark);
-    padding: 18px 24px;
-    display: flex; align-items: center; gap: 16px;
+    background: var(--surface); border-bottom: 1px solid var(--border);
+    padding: 16px 24px; display: flex; align-items: center; gap: 16px; box-shadow: var(--shadow);
   }
-  header .logo-mark { width: 36px; height: 36px; background: linear-gradient(135deg, var(--gold), var(--gold-dark)); border-radius: 8px; display: flex; align-items: center; justify-content: center; font-size: 1.1rem; flex-shrink: 0; }
-  header h1 { font-family: 'Playfair Display', serif; font-size: 1.2rem; font-weight: 600; color: var(--gold); letter-spacing: 0.02em; }
+  header .logo-mark { width: 36px; height: 36px; background: linear-gradient(135deg, var(--accent), var(--accent-dark)); border-radius: 8px; display: flex; align-items: center; justify-content: center; font-size: 1.1rem; flex-shrink: 0; }
+  header h1 { font-family: 'Playfair Display', serif; font-size: 1.2rem; font-weight: 600; color: var(--accent); letter-spacing: 0.02em; }
   header span { font-size: 0.78rem; color: var(--text2); letter-spacing: 0.04em; text-transform: uppercase; }
+  .header-actions { margin-left: auto; display: flex; align-items: center; gap: 10px; }
+  .theme-toggle { background: var(--surface2); border: 1px solid var(--border); color: var(--text); width: 34px; height: 34px; border-radius: 8px; cursor: pointer; font-size: 1rem; display:flex; align-items:center; justify-content:center; }
+  .btn-logout { background: none; border: 1px solid var(--border); color: var(--text2); padding: 7px 14px; border-radius: 7px; cursor: pointer; font-size: .78rem; font-family: 'Inter', sans-serif; }
+  .btn-logout:hover { border-color: var(--red); color: var(--red); }
 
   nav { display: flex; gap: 2px; padding: 20px 24px 0; flex-wrap: wrap; }
   nav button {
-    padding: 9px 18px; border-radius: 8px 8px 0 0;
-    border: 1px solid var(--navy-border); border-bottom: none;
-    background: var(--navy-mid); cursor: pointer; font-size: 0.85rem;
-    color: var(--text2); font-family: 'Inter', sans-serif; letter-spacing: 0.02em;
+    padding: 9px 16px; border-radius: 8px 8px 0 0;
+    border: 1px solid var(--border); border-bottom: none;
+    background: var(--surface2); cursor: pointer; font-size: 0.83rem;
+    color: var(--text2); font-family: 'Inter', sans-serif; letter-spacing: 0.01em;
     transition: all 0.2s;
   }
-  nav button:hover { color: var(--gold); background: var(--navy-light); }
-  nav button.active { background: var(--surface); color: var(--gold); font-weight: 600; border-color: var(--gold-dark); }
-  .tab { display: none; padding: 28px; background: var(--surface); border: 1px solid var(--navy-border); border-radius: 0 8px 8px 8px; margin: 0 24px 24px; }
+  nav button:hover { color: var(--accent); background: var(--surface); }
+  nav button.active { background: var(--surface); color: var(--accent); font-weight: 600; border-color: var(--border); box-shadow: 0 -2px 0 var(--accent) inset; }
+  .tab { display: none; padding: 28px; background: var(--surface); border: 1px solid var(--border); border-radius: 0 10px 10px 10px; margin: 0 24px 24px; box-shadow: var(--shadow); }
   .tab.active { display: block; }
 
-  /* Cards */
-  .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 14px; margin-bottom: 24px; }
-  .card { background: var(--surface2); border: 1px solid var(--navy-border); border-radius: 10px; padding: 18px 16px; }
+  .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 14px; margin-bottom: 24px; }
+  .card { background: var(--surface2); border: 1px solid var(--border); border-radius: 10px; padding: 18px 16px; }
   .card label { font-size: 0.72rem; color: var(--text2); display: block; margin-bottom: 6px; text-transform: uppercase; letter-spacing: 0.06em; }
-  .card .val { font-size: 1.35rem; font-weight: 600; color: var(--text); }
-  .card .sub { font-size: 0.7rem; color: var(--text2); margin-top: 4px; }
-  .card.green { border-color: rgba(74,222,128,0.3); background: var(--green-dim); }
-  .card.green .val { color: var(--green); }
-  .card.red { border-color: rgba(248,113,113,0.3); background: var(--red-dim); }
-  .card.red .val { color: var(--red); }
-  .card.blue { border-color: rgba(147,197,253,0.3); background: var(--blue-dim); }
-  .card.blue .val { color: #93C5FD; }
-  .card.purple { border-color: rgba(196,181,253,0.3); background: rgba(196,181,253,0.08); }
-  .card.purple .val { color: #C4B5FD; }
-  .card.amber { border-color: rgba(251,191,36,0.3); background: var(--amber-dim); }
-  .card.amber .val { color: var(--amber); }
-  .card.gold { border-color: var(--gold-dark); background: rgba(37,99,235,0.1); }
-  .card.gold .val { color: var(--gold); }
+  .card .val { font-size: 1.35rem; font-weight: 700; color: var(--text); }
+  .card .sub { font-size: 0.72rem; color: var(--text2); margin-top: 4px; }
+  .card.green  { border-color: var(--green-border);  background: var(--green-dim); }  .card.green .val  { color: var(--green); }
+  .card.red    { border-color: var(--red-border);    background: var(--red-dim); }    .card.red .val    { color: var(--red); }
+  .card.blue   { border-color: rgba(37,99,235,.25);  background: var(--blue-dim); }   .card.blue .val   { color: var(--blue-text); }
+  .card.purple { border-color: rgba(109,40,217,.25); background: var(--purple-dim); } .card.purple .val { color: var(--purple-text); }
+  .card.amber  { border-color: var(--amber-border);  background: var(--amber-dim); }  .card.amber .val  { color: var(--amber); }
+  .card.accent { border-color: var(--accent-dark); background: var(--accent-light); } .card.accent .val { color: var(--accent); }
 
-  /* Chart */
   .chart-wrap { position: relative; height: 280px; margin-bottom: 24px; }
 
-  /* Insights */
   .insights { display: grid; gap: 10px; margin-bottom: 24px; }
-  .insight { padding: 14px 16px; border-radius: 8px; border-left: 3px solid; font-size: 0.88rem; }
-  .insight.ok  { background: var(--green-dim); border-color: var(--green); color: var(--text); }
-  .insight.warn { background: var(--amber-dim); border-color: var(--amber); color: var(--text); }
-  .insight.bad  { background: var(--red-dim);   border-color: var(--red);   color: var(--text); }
-  .insight.info { background: var(--blue-dim);  border-color: #93C5FD;      color: var(--text); }
+  .insight { padding: 14px 16px; border-radius: 8px; border-left: 3px solid; font-size: 0.88rem; background: var(--surface2); }
+  .insight.ok   { border-color: var(--green); }
+  .insight.warn { border-color: var(--amber); }
+  .insight.bad  { border-color: var(--red); }
+  .insight.info { border-color: var(--accent); }
   .insight strong { display: block; margin-bottom: 3px; color: var(--text); }
 
-  /* Form */
+  .agent-card { display: flex; gap: 14px; padding: 18px; border-radius: 12px; border: 1px solid var(--border); background: var(--surface2); margin-bottom: 14px; }
+  .agent-card .agent-icon { font-size: 1.6rem; flex-shrink: 0; }
+  .agent-card .agent-name { font-size: .72rem; text-transform: uppercase; letter-spacing: .08em; color: var(--text2); font-weight: 600; margin-bottom: 4px; }
+  .agent-card .agent-msg { font-size: .92rem; line-height: 1.55; }
+  .agent-card.ok   { border-left: 3px solid var(--green); }
+  .agent-card.warn { border-left: 3px solid var(--amber); }
+  .agent-card.bad  { border-left: 3px solid var(--red); }
+
   .form-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 12px; margin-bottom: 16px; }
   .form-grid label { display: flex; flex-direction: column; font-size: 0.78rem; color: var(--text2); gap: 5px; text-transform: uppercase; letter-spacing: 0.05em; }
-  .form-grid input, .form-grid select {
-    padding: 9px 11px; border: 1px solid var(--navy-border); border-radius: 7px;
-    font-size: 0.9rem; background: var(--surface2); color: var(--text);
-    font-family: 'Inter', sans-serif;
+  .form-grid input, .form-grid select, .form-grid textarea {
+    padding: 9px 11px; border: 1px solid var(--border); border-radius: 7px;
+    font-size: 0.9rem; background: var(--surface); color: var(--text);
+    font-family: 'Inter', sans-serif; resize: vertical;
   }
-  .form-grid input:focus, .form-grid select:focus { outline: none; border-color: var(--gold-dark); }
-  .form-grid select option { background: var(--navy-mid); }
-  .btn { padding: 9px 22px; border-radius: 7px; border: none; cursor: pointer; font-size: 0.88rem; font-weight: 600; font-family: 'Inter', sans-serif; letter-spacing: 0.03em; transition: all 0.2s; }
-  .btn-primary { background: linear-gradient(135deg, var(--gold), var(--gold-dark)); color: var(--navy); }
+  .form-grid input:focus, .form-grid select:focus, .form-grid textarea:focus { outline: none; border-color: var(--accent); }
+  .btn-whatsapp { background: #25D366; color: #fff; border: none; padding: 6px 12px; border-radius: 6px; font-size: .78rem; font-weight: 600; cursor: pointer; font-family: 'Inter', sans-serif; white-space: nowrap; }
+  .btn-whatsapp:hover { opacity: .9; }
+  .btn-copy { background: var(--surface2); border: 1px solid var(--border); color: var(--text2); padding: 6px 12px; border-radius: 6px; font-size: .78rem; cursor: pointer; font-family: 'Inter', sans-serif; white-space: nowrap; }
+  .btn { padding: 9px 22px; border-radius: 7px; border: none; cursor: pointer; font-size: 0.88rem; font-weight: 600; font-family: 'Inter', sans-serif; letter-spacing: 0.02em; transition: all 0.2s; }
+  .btn-primary { background: linear-gradient(135deg, var(--accent), var(--accent-dark)); color: #fff; }
   .btn-primary:hover { opacity: 0.9; }
-  .btn-danger { background: var(--red-dim); color: var(--red); border: 1px solid rgba(248,113,113,0.3); font-size: 0.78rem; padding: 4px 10px; }
-  .btn-secondary { background: var(--surface2); border: 1px solid var(--navy-border); color: var(--text2); }
-  .btn-secondary:hover { border-color: var(--gold-dark); color: var(--gold); }
+  .btn-danger { background: var(--red-dim); color: var(--red); border: 1px solid var(--red-border); font-size: 0.78rem; padding: 4px 10px; }
+  .btn-secondary { background: var(--surface2); border: 1px solid var(--border); color: var(--text2); }
+  .btn-secondary:hover { border-color: var(--accent); color: var(--accent); }
 
-  /* Table */
   .table-wrap { overflow-x: auto; }
   table { width: 100%; border-collapse: collapse; font-size: 0.86rem; }
-  th { text-align: left; padding: 10px 12px; background: var(--navy); border-bottom: 1px solid var(--navy-border); color: var(--text2); font-weight: 500; text-transform: uppercase; font-size: 0.72rem; letter-spacing: 0.06em; }
-  td { padding: 11px 12px; border-bottom: 1px solid var(--navy-border); vertical-align: middle; color: var(--text); }
+  th { text-align: left; padding: 10px 12px; background: var(--surface2); border-bottom: 1px solid var(--border); color: var(--text2); font-weight: 600; text-transform: uppercase; font-size: 0.7rem; letter-spacing: 0.06em; }
+  td { padding: 11px 12px; border-bottom: 1px solid var(--border); vertical-align: middle; color: var(--text); }
   tr:last-child td { border-bottom: none; }
-  tr:hover td { background: rgba(255,255,255,0.02); }
+  tr:hover td { background: var(--surface2); }
   .badge { display: inline-block; padding: 3px 10px; border-radius: 999px; font-size: 0.75rem; font-weight: 600; }
-  .badge.pagar   { background: var(--red-dim); color: var(--red); border: 1px solid rgba(248,113,113,0.2); }
-  .badge.receber { background: var(--green-dim); color: var(--green); border: 1px solid rgba(74,222,128,0.2); }
-  .badge.ctv { background: var(--amber-dim); color: var(--amber); border: 1px solid rgba(251,191,36,0.2); }
-  .badge.do  { background: rgba(196,181,253,0.12); color: #C4B5FD; border: 1px solid rgba(196,181,253,0.2); }
+  .badge.pagar   { background: var(--red-dim); color: var(--red); border: 1px solid var(--red-border); }
+  .badge.receber { background: var(--green-dim); color: var(--green); border: 1px solid var(--green-border); }
+  .badge.ctv { background: var(--amber-dim); color: var(--amber); border: 1px solid var(--amber-border); }
+  .badge.do  { background: var(--purple-dim); color: var(--purple-text); border: 1px solid rgba(109,40,217,.2); }
   .tag-status { font-size: 0.72rem; color: var(--text2); }
 
-  /* Import */
-  .drop-area { border: 2px dashed var(--navy-border); border-radius: 10px; padding: 40px; text-align: center; color: var(--text2); cursor: pointer; transition: all 0.2s; margin-bottom: 16px; background: var(--surface2); }
-  .drop-area:hover, .drop-area.drag { border-color: var(--gold); color: var(--gold); }
+  .drop-area { border: 2px dashed var(--border); border-radius: 10px; padding: 40px; text-align: center; color: var(--text2); cursor: pointer; transition: all 0.2s; margin-bottom: 16px; background: var(--surface2); }
+  .drop-area:hover, .drop-area.drag { border-color: var(--accent); color: var(--accent); }
   .drop-area input { display: none; }
   .import-help { font-size: 0.82rem; color: var(--text2); margin-bottom: 16px; line-height: 1.7; }
-  .import-help code { background: var(--navy); border: 1px solid var(--navy-border); padding: 2px 7px; border-radius: 4px; font-size: 0.78rem; color: var(--gold); }
+  .import-help code { background: var(--surface2); border: 1px solid var(--border); padding: 2px 7px; border-radius: 4px; font-size: 0.78rem; color: var(--accent); }
+  .erp-note { display:flex; gap:10px; align-items:flex-start; background: var(--blue-dim); border: 1px solid rgba(37,99,235,.2); border-radius: 10px; padding: 14px 16px; margin-bottom: 20px; font-size: .84rem; color: var(--text); line-height: 1.6; }
 
   .filter-row { display: flex; gap: 10px; margin-bottom: 16px; flex-wrap: wrap; align-items: flex-end; }
-  .filter-row input, .filter-row select { padding: 7px 10px; border: 1px solid var(--navy-border); border-radius: 6px; font-size: 0.85rem; background: var(--surface2); color: var(--text); }
+  .filter-row input, .filter-row select { padding: 7px 10px; border: 1px solid var(--border); border-radius: 6px; font-size: 0.85rem; background: var(--surface); color: var(--text); }
   .filter-row label { font-size: 0.72rem; color: var(--text2); text-transform: uppercase; letter-spacing: 0.05em; display: flex; flex-direction: column; gap: 4px; }
 
-  .section-title { font-size: 0.78rem; font-weight: 600; color: var(--gold); margin-bottom: 14px; margin-top: 8px; text-transform: uppercase; letter-spacing: 0.1em; }
+  .section-title { font-size: 0.78rem; font-weight: 700; color: var(--accent); margin-bottom: 14px; margin-top: 8px; text-transform: uppercase; letter-spacing: 0.09em; }
+  .section-sub { font-size: 0.85rem; color: var(--text2); margin-bottom: 16px; line-height: 1.6; }
   .empty { text-align: center; color: var(--text2); padding: 32px; font-size: 0.88rem; }
-  .row-paid td { opacity: 0.4; }
+  .row-paid td { opacity: 0.45; }
   .pos { color: var(--green); font-weight: 600; }
   .neg { color: var(--red); font-weight: 600; }
 
-  /* Bussola */
-  .bussola-hero {
-    background: linear-gradient(135deg, #030D1A 0%, #162032 60%, #1a2a1a 100%);
-    border: 1px solid var(--gold-dark); border-radius: 12px; padding: 24px 28px; margin-bottom: 24px;
-    position: relative; overflow: hidden;
-  }
-  .bussola-hero::before {
-    content: ''; position: absolute; top: -40px; right: -40px;
-    width: 160px; height: 160px;
-    background: radial-gradient(circle, rgba(37,99,235,0.15) 0%, transparent 70%);
-    pointer-events: none;
-  }
-  .bussola-hero h2 { font-family: 'Playfair Display', serif; font-size: 1.15rem; margin-bottom: 6px; color: var(--gold); }
-  .bussola-hero p { font-size: 0.84rem; color: var(--text2); line-height: 1.6; }
-  .toc-formula { background: var(--surface2); border: 1px solid var(--navy-border); border-left: 3px solid var(--gold); border-radius: 8px; padding: 16px 18px; margin-bottom: 24px; font-size: 0.86rem; color: var(--text2); line-height: 1.8; }
-  .toc-formula span { font-weight: 700; color: var(--gold); }
+  .hero { background: linear-gradient(135deg, var(--accent-light) 0%, var(--surface2) 100%); border: 1px solid var(--border); border-radius: 12px; padding: 22px 26px; margin-bottom: 24px; }
+  .hero h2 { font-family: 'Playfair Display', serif; font-size: 1.1rem; margin-bottom: 6px; color: var(--accent); }
+  .hero p { font-size: 0.84rem; color: var(--text2); line-height: 1.6; }
 
-  .toc-questions { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px; margin-bottom: 24px; }
-  .toc-q { border: 1px solid var(--navy-border); border-radius: 10px; padding: 16px; background: var(--surface2); }
-  .toc-q .q-icon { font-size: 1.4rem; margin-bottom: 8px; }
-  .toc-q .q-label { font-size: 0.7rem; color: var(--text2); text-transform: uppercase; font-weight: 600; letter-spacing: 0.08em; }
-  .toc-q .q-val { font-size: 1.15rem; font-weight: 700; margin-top: 6px; }
-  .toc-q.up { border-color: rgba(74,222,128,0.3); background: var(--green-dim); }
-  .toc-q.up .q-val { color: var(--green); }
-  .toc-q.down { border-color: rgba(248,113,113,0.3); background: var(--red-dim); }
-  .toc-q.down .q-val { color: var(--red); }
-  .toc-q.neutral { border-color: rgba(37,99,235,0.3); background: rgba(37,99,235,0.08); }
-  .toc-q.neutral .q-val { color: var(--gold); }
+  .param-row { display: flex; gap: 12px; align-items: flex-end; margin-bottom: 24px; flex-wrap: wrap; }
+  .param-row label { font-size: 0.72rem; color: var(--text2); text-transform: uppercase; letter-spacing: 0.06em; display: flex; flex-direction: column; gap: 5px; }
+  .param-row input { padding: 9px 11px; border: 1px solid var(--border); border-radius: 7px; font-size: 0.9rem; width: 190px; background: var(--surface); color: var(--text); }
+  .param-row input:focus { outline: none; border-color: var(--accent); }
+  .param-row .hint { font-size: .68rem; color: var(--text2); margin-top: 2px; }
 
-  .invest-row { display: flex; gap: 12px; align-items: flex-end; margin-bottom: 24px; flex-wrap: wrap; }
-  .invest-row label { font-size: 0.72rem; color: var(--text2); text-transform: uppercase; letter-spacing: 0.06em; display: flex; flex-direction: column; gap: 5px; }
-  .invest-row input { padding: 9px 11px; border: 1px solid var(--navy-border); border-radius: 7px; font-size: 0.9rem; width: 220px; background: var(--surface2); color: var(--text); }
-  .invest-row input:focus { outline: none; border-color: var(--gold-dark); }
+  .divider { height: 1px; background: var(--border); margin: 20px 0; }
 
-  /* Divider */
-  .divider { height: 1px; background: var(--navy-border); margin: 20px 0; }
-
-  /* Scrollbar */
   ::-webkit-scrollbar { width: 6px; height: 6px; }
-  ::-webkit-scrollbar-track { background: var(--navy); }
-  ::-webkit-scrollbar-thumb { background: var(--navy-border); border-radius: 3px; }
-  ::-webkit-scrollbar-thumb:hover { background: var(--gold-dark); }
+  ::-webkit-scrollbar-track { background: var(--bg); }
+  ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+  ::-webkit-scrollbar-thumb:hover { background: var(--accent-dark); }
 
   @media (max-width: 600px) {
     nav { padding: 16px 12px 0; }
@@ -187,29 +178,34 @@
 
   /* Auth screen */
   #auth-screen { min-height: 100vh; display: none; align-items: center; justify-content: center;
-    background: radial-gradient(ellipse at 30% 40%, rgba(37,99,235,.08) 0%, transparent 60%), var(--navy); padding: 20px; }
-  .auth-box { background: var(--surface); border: 1px solid var(--gold-dark); border-radius: 16px;
+    background: radial-gradient(ellipse at 30% 40%, var(--accent-light) 0%, transparent 60%), var(--bg); padding: 20px; }
+  .auth-box { background: var(--surface); border: 1px solid var(--border); box-shadow: var(--shadow); border-radius: 16px;
     padding: 44px 36px; width: 100%; max-width: 380px; text-align: center; }
   .auth-box .logo { font-size: 2.4rem; margin-bottom: 10px; }
-  .auth-box h1 { font-family: 'Playfair Display', serif; font-size: 1.35rem; color: var(--gold); margin-bottom: 4px; }
+  .auth-box h1 { font-family: 'Playfair Display', serif; font-size: 1.35rem; color: var(--accent); margin-bottom: 4px; }
   .auth-box p { font-size: .8rem; color: var(--text2); margin-bottom: 26px; }
   .auth-field { display: flex; flex-direction: column; gap: 6px; margin-bottom: 14px; text-align: left; }
   .auth-field label { font-size: .72rem; color: var(--text2); text-transform: uppercase; letter-spacing: .06em; }
-  .auth-field input { padding: 10px 13px; border: 1px solid var(--navy-border); border-radius: 8px;
+  .auth-field input { padding: 10px 13px; border: 1px solid var(--border); border-radius: 8px;
     background: var(--surface2); color: var(--text); font-size: .92rem; font-family: 'Inter', sans-serif; }
-  .auth-field input:focus { outline: none; border-color: var(--gold-dark); }
+  .auth-field input:focus { outline: none; border-color: var(--accent); }
   .auth-error { font-size: .82rem; margin-top: 12px; display: none; color: var(--red); }
   .auth-switch { margin-top: 18px; font-size: .82rem; color: var(--text2); }
-  .auth-switch a { color: var(--gold); text-decoration: none; cursor: pointer; }
-  .btn-logout { background: none; border: 1px solid var(--navy-border); color: var(--text2); padding: 6px 14px;
-    border-radius: 7px; cursor: pointer; font-size: .78rem; font-family: 'Inter', sans-serif; }
-  .btn-logout:hover { border-color: var(--red); color: var(--red); }
+  .auth-switch a { color: var(--accent); text-decoration: none; cursor: pointer; }
+  .btn-google { width: 100%; display: flex; align-items: center; justify-content: center; gap: 10px;
+    padding: 10px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface);
+    color: var(--text); font-family: 'Inter', sans-serif; font-size: .88rem; font-weight: 600; cursor: pointer; margin-bottom: 14px; }
+  .btn-google:hover { background: var(--surface2); }
+  .auth-divider { display: flex; align-items: center; gap: 10px; margin: 4px 0 16px; color: var(--text2); font-size: .78rem; }
+  .auth-divider::before, .auth-divider::after { content: ''; flex: 1; height: 1px; background: var(--border); }
+  .auth-theme-toggle { position: fixed; top: 18px; right: 18px; }
 </style>
 </head>
 <body>
 
 <!-- AUTH -->
 <div id="auth-screen">
+  <button class="theme-toggle auth-theme-toggle" onclick="toggleTheme()" id="theme-toggle-auth">🌙</button>
   <div class="auth-box">
     <div class="logo">🧭</div>
     <h1>MeuArgus</h1>
@@ -218,6 +214,11 @@
       <label>Nome</label>
       <input id="auth-nome" type="text" placeholder="Seu nome">
     </div>
+    <button class="btn-google" onclick="loginComGoogle()" type="button">
+      <svg width="18" height="18" viewBox="0 0 18 18"><path fill="#4285F4" d="M17.64 9.2c0-.64-.06-1.25-.16-1.84H9v3.48h4.84a4.14 4.14 0 0 1-1.8 2.72v2.26h2.9c1.7-1.57 2.7-3.88 2.7-6.62z"/><path fill="#34A853" d="M9 18c2.43 0 4.47-.8 5.96-2.18l-2.9-2.26c-.8.54-1.83.86-3.06.86-2.35 0-4.34-1.59-5.05-3.72H.96v2.33A9 9 0 0 0 9 18z"/><path fill="#FBBC05" d="M3.95 10.7A5.4 5.4 0 0 1 3.67 9c0-.59.1-1.17.28-1.7V4.97H.96A9 9 0 0 0 0 9c0 1.45.35 2.83.96 4.03l2.99-2.33z"/><path fill="#EA4335" d="M9 3.58c1.32 0 2.51.46 3.44 1.35l2.58-2.58A9 9 0 0 0 .96 4.97l2.99 2.33C4.66 5.17 6.65 3.58 9 3.58z"/></svg>
+      Continuar com Google
+    </button>
+    <div class="auth-divider"><span>ou</span></div>
     <div class="auth-field">
       <label>E-mail</label>
       <input id="auth-email" type="email" placeholder="voce@empresa.com" autocomplete="username">
@@ -240,18 +241,23 @@
     <h1>MeuArgus</h1>
     <span id="hd-subtitle"></span>
   </div>
-  <div style="margin-left:auto"><button class="btn-logout" onclick="doLogout()">Sair</button></div>
+  <div class="header-actions">
+    <button class="theme-toggle" onclick="toggleTheme()" id="theme-toggle-app">🌙</button>
+    <button class="btn-logout" onclick="doLogout()">Sair</button>
+  </div>
 </header>
 
 <nav>
-  <button class="active" onclick="showTab('dashboard')">📊 Dashboard</button>
-  <button onclick="showTab('bussola')">🧭 Bússola</button>
+  <button class="active" onclick="showTab('dashboard')">📊 Painel</button>
+  <button onclick="showTab('indicadores')">📈 Indicadores</button>
   <button onclick="showTab('lancamentos')">📋 Lançamentos</button>
+  <button onclick="showTab('cobranca')">📮 Cobrança</button>
+  <button onclick="showTab('insights')">💡 Insights</button>
   <button onclick="showTab('previsao')">📅 Previsão</button>
   <button onclick="showTab('importar')">📂 Importar</button>
 </nav>
 
-<!-- DASHBOARD -->
+<!-- PAINEL -->
 <div class="tab active" id="tab-dashboard">
   <div class="cards">
     <div class="card blue"><label>Saldo Atual (pago)</label><div class="val" id="c-saldo">R$ 0</div></div>
@@ -261,59 +267,42 @@
   </div>
   <div class="section-title">Fluxo Diário — Próximos 30 dias</div>
   <div class="chart-wrap"><canvas id="chartFluxo"></canvas></div>
-  <div class="section-title">Insights de Previsibilidade</div>
+  <div class="section-title">Alertas</div>
   <div class="insights" id="insights-box"></div>
 </div>
 
-<!-- BUSSOLA FINANCEIRA -->
-<div class="tab" id="tab-bussola">
-  <div class="bussola-hero">
-    <h2>🧭 Bússola Financeira — TOC (Teoria das Restrições)</h2>
-    <p>Baseada no livro de Thomas Corbett. Três medidas guiam todas as decisões: <strong>Ganho (G)</strong>, <strong>Investimento (I)</strong> e <strong>Despesa Operacional (DO)</strong>.</p>
+<!-- INDICADORES -->
+<div class="tab" id="tab-indicadores">
+  <div class="hero">
+    <h2>📈 Indicadores Financeiros</h2>
+    <p>Os números que mostram a saúde real do negócio: quanto sobra, quanto rende e por quanto tempo o caixa aguenta. Referência de mercado: um negócio saudável mantém <strong>margem líquida mínima de 25%</strong>.</p>
   </div>
 
-  <div class="toc-formula">
-    <strong>As 3 medidas da TOC:</strong><br><br>
-    🟢 <span>Ganho (G)</span> = Receitas recebidas − Custo Totalmente Variável (CTV) &nbsp;|&nbsp;
-    🔵 <span>Despesa Operacional (DO)</span> = Todos os gastos fixos para manter a empresa funcionando &nbsp;|&nbsp;
-    🟡 <span>Investimento (I)</span> = Total de ativos da empresa<br><br>
-    <strong>Lucro Líquido (LL) = G − DO &nbsp;|&nbsp; RSI = LL / I</strong><br><br>
-    <em style="color:var(--gray)">Toda decisão deve ser avaliada pelo seu impacto nessas 3 medidas. A meta: aumentar G, diminuir I e diminuir DO.</em>
-  </div>
-
-  <div class="invest-row">
-    <label>Investimento total da empresa (R$)
-      <input type="number" id="inv-total" placeholder="Ex: 500000" oninput="saveBussola();renderBussola()">
+  <div class="section-title">Parâmetros de Referência</div>
+  <div class="param-row">
+    <label>Taxa Selic atual (% a.a.)
+      <input type="number" step="0.01" id="p-selic" placeholder="Ex: 10,75" oninput="saveParams();renderIndicadores();renderInsights()">
     </label>
-    <button class="btn btn-primary" onclick="saveBussola();renderBussola()">Atualizar</button>
+    <label>Taxa média do cartão (% a.m.)
+      <input type="number" step="0.01" id="p-cartao" placeholder="Ex: 3,50" oninput="saveParams();renderIndicadores();renderInsights()">
+    </label>
+  </div>
+  <div class="param-row" style="margin-top:-14px">
+    <span class="hint">Ajuste conforme sua realidade — a Selic e a taxa de cartão mudam com o tempo, então mantenha atualizado para insights precisos.</span>
   </div>
 
-  <div class="section-title">Indicadores do Período Atual</div>
+  <div class="section-title">Rentabilidade</div>
   <div class="cards">
-    <div class="card green"><label>Ganho (G)</label><div class="val" id="b-ganho">R$ 0</div><div class="sub">Receitas recebidas − CTV</div></div>
-    <div class="card purple"><label>Despesa Operacional (DO)</label><div class="val" id="b-do">R$ 0</div><div class="sub">Gastos fixos operacionais</div></div>
-    <div class="card" id="b-card-ll"><label>Lucro Líquido (LL)</label><div class="val" id="b-ll">R$ 0</div><div class="sub">G − DO</div></div>
-    <div class="card amber"><label>RSI (anualizado)</label><div class="val" id="b-rsi">—</div><div class="sub">LL anual / Investimento</div></div>
-    <div class="card blue"><label>CTV Total</label><div class="val" id="b-ctv">R$ 0</div><div class="sub">Custos totalmente variáveis</div></div>
+    <div class="card" id="k-card-margem"><label>Margem Líquida</label><div class="val" id="k-margem">—</div><div class="sub">Meta mínima: 25%</div></div>
+    <div class="card blue"><label>Receita Recebida</label><div class="val" id="k-receita">R$ 0</div><div class="sub">Total já recebido</div></div>
+    <div class="card" id="k-card-ll"><label>Lucro Líquido</label><div class="val" id="k-ll">R$ 0</div><div class="sub">Receita − Despesas</div></div>
   </div>
 
-  <div class="section-title">As 3 Perguntas da Bússola Financeira</div>
-  <p style="font-size:0.85rem;color:var(--gray);margin-bottom:16px">Antes de qualquer decisão, avalie o impacto nestas 3 dimensões:</p>
-  <div class="toc-questions" id="toc-questions"></div>
-
-  <div class="section-title" style="margin-top:8px">Insights da Bússola</div>
-  <div class="insights" id="bussola-insights"></div>
-
-  <div class="section-title" style="margin-top:16px">Classificação dos Lançamentos</div>
-  <p style="font-size:0.85rem;color:var(--gray);margin-bottom:12px">
-    Classifique cada <strong>conta a pagar</strong> como <span class="badge ctv">CTV</span> (custo que varia com o volume — matéria-prima, comissão, embalagem) ou <span class="badge do">DO</span> (gasto fixo — salário, aluguel, energia, depreciação).
-    As <strong>contas a receber</strong> compõem o <strong>Ganho</strong>.
-  </p>
-  <div class="table-wrap">
-    <table>
-      <thead><tr><th>Descrição</th><th>Tipo</th><th>Valor</th><th>Status</th><th>Classificação TOC</th></tr></thead>
-      <tbody id="tb-class"></tbody>
-    </table>
+  <div class="section-title">Caixa e Liquidez</div>
+  <div class="cards">
+    <div class="card" id="k-card-liquidez"><label>Índice de Liquidez</label><div class="val" id="k-liquidez">—</div><div class="sub">(Saldo + a receber) / a pagar, 30d</div></div>
+    <div class="card purple"><label>Capital de Giro Necessário</label><div class="val" id="k-capgiro">R$ 0</div><div class="sub">Déficit projetado em 30d</div></div>
+    <div class="card" id="k-card-folego"><label>Fôlego de Caixa</label><div class="val" id="k-folego">—</div><div class="sub">Meses de despesa cobertos pelo saldo</div></div>
   </div>
 </div>
 
@@ -339,6 +328,12 @@
     <label>Categoria
       <input id="f-cat" type="text" placeholder="Ex: Aluguel, Vendas...">
     </label>
+    <label id="contraparte-label">Cliente
+      <input id="f-contraparte" type="text" placeholder="Nome do cliente">
+    </label>
+    <label id="telefone-label">Telefone (WhatsApp)
+      <input id="f-telefone" type="text" placeholder="Ex: 11987654321">
+    </label>
     <label>Recorrência
       <select id="f-rec">
         <option value="none">Sem recorrência</option>
@@ -347,10 +342,10 @@
         <option value="quinzenal">Quinzenal</option>
       </select>
     </label>
-    <label id="toc-class-label">Classificação TOC
+    <label id="toc-class-label">Tipo de Custo
       <select id="f-toc">
-        <option value="do">DO — Despesa Operacional (fixo)</option>
-        <option value="ctv">CTV — Custo Totalmente Variável</option>
+        <option value="do">Fixo (estrutura da empresa)</option>
+        <option value="ctv">Variável (varia com o volume)</option>
       </select>
     </label>
   </div>
@@ -380,9 +375,84 @@
   <div class="table-wrap">
     <table>
       <thead>
-        <tr><th>Tipo</th><th>Descrição</th><th>Categoria</th><th>Vencimento</th><th>Valor</th><th>TOC</th><th>Status</th><th></th></tr>
+        <tr><th>Tipo</th><th>Descrição</th><th>Categoria</th><th>Cliente/Fornecedor</th><th>Vencimento</th><th>Valor</th><th>Custo</th><th>Status</th><th></th></tr>
       </thead>
       <tbody id="tb-body"></tbody>
+    </table>
+  </div>
+</div>
+
+<!-- COBRANÇA -->
+<div class="tab" id="tab-cobranca">
+  <div class="hero">
+    <h2>📮 Régua de Cobrança</h2>
+    <p>Contas a receber pendentes, organizadas por tempo de atraso, e um raio-x de quem paga em dia e quem está deixando de pagar — para você saber em quem cobrar primeiro.</p>
+  </div>
+
+  <div class="section-title">Vencidos por Faixa de Atraso</div>
+  <div class="cards" id="aging-cards"></div>
+
+  <div class="section-title" style="margin-top:8px">Vencendo em Breve (próx. 3 dias) e Hoje</div>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Cliente</th><th>Descrição</th><th>Vencimento</th><th>Valor</th><th></th></tr></thead>
+      <tbody id="tb-avencer"></tbody>
+    </table>
+  </div>
+
+  <div class="section-title" style="margin-top:24px">Detalhamento dos Vencidos</div>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Cliente</th><th>Descrição</th><th>Vencimento</th><th>Dias em atraso</th><th>Valor</th><th></th></tr></thead>
+      <tbody id="tb-vencidos"></tbody>
+    </table>
+  </div>
+
+  <div class="section-title" style="margin-top:24px">Classificação de Pagadores</div>
+  <p class="section-sub">Agrupado pelo campo <strong>Cliente</strong> preenchido em cada conta a receber. Sem cliente informado, o lançamento não entra nesta classificação.</p>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Cliente</th><th>Recebido</th><th>Em aberto</th><th>Maior atraso</th><th>Classificação</th></tr></thead>
+      <tbody id="tb-pagadores"></tbody>
+    </table>
+  </div>
+
+  <div class="section-title" style="margin-top:24px">Modelos de Mensagem de Cobrança</div>
+  <p class="section-sub">
+    Use <code>{cliente}</code>, <code>{valor}</code>, <code>{vencimento}</code> e <code>{dias_atraso}</code> — são substituídos automaticamente ao enviar.
+    Hoje o botão "WhatsApp" abre uma conversa com a mensagem pronta, via link direto (sem custo, sem precisar de API). Quando vocês tiverem a API oficial do WhatsApp Business (Meta), essa mesma estrutura de mensagens serve para disparar o envio automático — é só trocar o link por uma chamada à API.
+  </p>
+  <div class="form-grid" style="grid-template-columns:1fr">
+    <label>Lembrete (antes do vencimento)
+      <textarea id="tpl-lembrete" rows="2" oninput="saveTemplates()"></textarea>
+    </label>
+    <label>No dia do vencimento
+      <textarea id="tpl-vencimento" rows="2" oninput="saveTemplates()"></textarea>
+    </label>
+    <label>Em atraso
+      <textarea id="tpl-vencido" rows="2" oninput="saveTemplates()"></textarea>
+    </label>
+  </div>
+</div>
+
+<!-- INSIGHTS -->
+<div class="tab" id="tab-insights">
+  <div class="hero">
+    <h2>💡 Insights de Gestão</h2>
+    <p>Leitura automática dos seus números, organizada por área de análise — como se três especialistas olhassem seus dados: rentabilidade, caixa e custo de capital. Hoje é uma análise baseada em regras financeiras; a estrutura já está pronta para plugar agentes de IA especializados no futuro.</p>
+  </div>
+
+  <div class="section-title">Análise por Especialidade</div>
+  <div id="agents-box"></div>
+
+  <div class="section-title" style="margin-top:24px">Classificação dos Custos</div>
+  <p class="section-sub">
+    Classifique cada <strong>conta a pagar</strong> como <span class="badge ctv">Variável</span> (muda com o volume vendido — matéria-prima, comissão, embalagem) ou <span class="badge do">Fixo</span> (estrutura da empresa — salário, aluguel, energia). As <strong>contas a receber</strong> compõem a receita.
+  </p>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Descrição</th><th>Tipo</th><th>Valor</th><th>Status</th><th>Classificação</th></tr></thead>
+      <tbody id="tb-class"></tbody>
     </table>
   </div>
 </div>
@@ -403,9 +473,10 @@
 <!-- IMPORTAR -->
 <div class="tab" id="tab-importar">
   <div class="section-title">Importar CSV</div>
+  <div class="erp-note">🔌 <div><strong>Pronto para integração com ERP.</strong> Cada lançamento guarda a origem (manual, importado por CSV ou, futuramente, sincronizado direto de um ERP). Quando você conectar um ERP, os lançamentos sincronizados aparecem aqui automaticamente, sem duplicar o que já foi digitado à mão.</div></div>
   <p class="import-help">
     Colunas obrigatórias: <code>tipo</code> (pagar/receber) · <code>descricao</code> · <code>valor</code> · <code>vencimento</code> (DD/MM/AAAA)<br>
-    Colunas opcionais: <code>categoria</code> · <code>toc</code> (ctv ou do)
+    Colunas opcionais: <code>categoria</code> · <code>custo</code> (variavel ou fixo) · <code>cliente</code> (para contas a receber, alimenta a Régua de Cobrança)
   </p>
   <div class="drop-area" id="drop-area" onclick="document.getElementById('file-input').click()"
     ondragover="event.preventDefault();this.classList.add('drag')"
@@ -432,7 +503,7 @@
 
 <script>
 // ══════════════════════════════════════════════
-// ⚙️  CONFIGURAÇÃO SUPABASE — cole suas credenciais
+// ⚙️  CONFIGURAÇÃO SUPABASE
 // ══════════════════════════════════════════════
 const SUPABASE_URL = 'https://ijbzdhpfhusckvoecdjw.supabase.co';
 const SUPABASE_KEY = 'sb_publishable_hJhexGzbi1soGSnlXwgQMA_wkQG9_yk';
@@ -440,12 +511,70 @@ const SUPABASE_KEY = 'sb_publishable_hJhexGzbi1soGSnlXwgQMA_wkQG9_yk';
 
 const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
+// ─── TEMA ────────────────────────────────────────────────
+function applyTheme(mode) {
+  document.documentElement.setAttribute('data-theme', mode);
+  const icon = mode === 'dark' ? '☀️' : '🌙';
+  const a = document.getElementById('theme-toggle-auth'); if (a) a.textContent = icon;
+  const b = document.getElementById('theme-toggle-app');  if (b) b.textContent = icon;
+}
+function toggleTheme() {
+  const cur = document.documentElement.getAttribute('data-theme') === 'dark' ? 'dark' : 'light';
+  const next = cur === 'dark' ? 'light' : 'dark';
+  localStorage.setItem('meuargus_theme', next);
+  applyTheme(next);
+}
+(function initTheme() {
+  const saved = localStorage.getItem('meuargus_theme');
+  applyTheme(saved === 'dark' ? 'dark' : 'light');
+})();
+
 // ─── STATE ───────────────────────────────────────────────
 let data = [];
-let bussolaState = JSON.parse(localStorage.getItem('fc_bussola') || '{"investimento":0}');
+let paramsState = JSON.parse(localStorage.getItem('meuargus_params') || '{"selic":10.75,"cartao":3.5}');
+const TEMPLATES_PADRAO = {
+  lembrete: 'Olá {cliente}! Passando para lembrar que sua fatura de {valor} vence em {vencimento}. Qualquer dúvida, estou à disposição!',
+  vencimento: 'Olá {cliente}, sua fatura de {valor} vence hoje ({vencimento}). Para evitar juros, garanta o pagamento ainda hoje. Obrigado!',
+  vencido: 'Olá {cliente}, identificamos que sua fatura de {valor}, vencida em {vencimento}, está em aberto há {dias_atraso} dia(s). Podemos ajudar a regularizar?'
+};
+let templatesState = Object.assign({}, TEMPLATES_PADRAO, JSON.parse(localStorage.getItem('meuargus_templates') || '{}'));
+
+function saveTemplates() {
+  templatesState.lembrete = document.getElementById('tpl-lembrete').value;
+  templatesState.vencimento = document.getElementById('tpl-vencimento').value;
+  templatesState.vencido = document.getElementById('tpl-vencido').value;
+  localStorage.setItem('meuargus_templates', JSON.stringify(templatesState));
+}
+
+function fillTemplate(tpl, r, dias) {
+  return tpl
+    .replace(/{cliente}/g, r.contraparte || 'Cliente')
+    .replace(/{valor}/g, fmt(r.valor))
+    .replace(/{vencimento}/g, fmtDate(r.vencimento))
+    .replace(/{dias_atraso}/g, Math.max(0, dias || 0));
+}
+
+function waLink(telefone, msg) {
+  const digits = (telefone || '').replace(/\D/g, '');
+  if (!digits) return null;
+  const comPais = digits.length <= 11 ? '55' + digits : digits;
+  return 'https://wa.me/' + comPais + '?text=' + encodeURIComponent(msg);
+}
+
+async function copiarMsg(msg) {
+  try { await navigator.clipboard.writeText(msg); showSync('Mensagem copiada ✓'); }
+  catch (e) { showSync('Não foi possível copiar ✗', true); }
+}
+
+function acaoCobranca(r, tplKey, dias) {
+  const msg = fillTemplate(templatesState[tplKey], r, dias);
+  const link = waLink(r.contraparte_telefone, msg);
+  const escMsg = msg.replace(/"/g, '&quot;');
+  if (link) return `<a class="btn-whatsapp" href="${link}" target="_blank" rel="noopener">📲 WhatsApp</a>`;
+  return `<button class="btn-copy" data-msg="${escMsg}" onclick="copiarMsg(this.dataset.msg)">Copiar msg</button>`;
+}
 let chartFluxo, chartPrevisao;
 let pendingImport = [];
-let _saving = false;
 let currentUser = null;
 let authMode = 'login';
 
@@ -505,6 +634,15 @@ async function initAuth() {
   else document.getElementById('auth-screen').style.display = 'flex';
 }
 
+async function loginComGoogle() {
+  const { error } = await sb.auth.signInWithOAuth({ provider: 'google', options: { redirectTo: window.location.origin + '/app' } });
+  if (error) {
+    const err = document.getElementById('auth-error');
+    err.textContent = 'Não foi possível iniciar o login com Google.';
+    err.style.color = 'var(--red)'; err.style.display = 'block';
+  }
+}
+
 // ── Sync indicator ──────────────────────────────────────
 function showSync(msg, err) {
   let el = document.getElementById('sync-status');
@@ -514,9 +652,9 @@ function showSync(msg, err) {
     el.style.cssText = 'position:fixed;bottom:16px;right:16px;padding:8px 16px;border-radius:8px;font-size:.8rem;z-index:999;transition:opacity .4s;font-family:Inter,sans-serif';
     document.body.appendChild(el);
   }
-  el.style.background = err ? 'rgba(248,113,113,.15)' : 'rgba(74,222,128,.15)';
-  el.style.color = err ? '#F87171' : '#4ADE80';
-  el.style.border = `1px solid ${err ? 'rgba(248,113,113,.3)' : 'rgba(74,222,128,.3)'}`;
+  el.style.background = err ? 'var(--red-dim)' : 'var(--green-dim)';
+  el.style.color = err ? 'var(--red)' : 'var(--green)';
+  el.style.border = `1px solid ${err ? 'var(--red-border)' : 'var(--green-border)'}`;
   el.style.opacity = '1';
   el.textContent = msg;
   setTimeout(() => { el.style.opacity = '0'; }, 2500);
@@ -527,12 +665,6 @@ async function loadData() {
   const { data: rows, error } = await sb.from('lancamentos').select('*').order('vencimento', { ascending: true });
   if (error) { showSync('Erro ao carregar dados ✗', true); return; }
   data = rows || [];
-  refreshAll();
-}
-
-// ── Save (insert/update) ─────────────────────────────────
-async function save() {
-  // refreshAll uses in-memory `data`; persist happens via individual ops
   refreshAll();
 }
 
@@ -559,20 +691,23 @@ async function _delete(id) {
   return true;
 }
 
-function saveBussola() {
-  bussolaState.investimento = parseFloat(document.getElementById('inv-total').value) || 0;
-  localStorage.setItem('fc_bussola', JSON.stringify(bussolaState));
+function saveParams() {
+  paramsState.selic = parseFloat(document.getElementById('p-selic').value) || 0;
+  paramsState.cartao = parseFloat(document.getElementById('p-cartao').value) || 0;
+  localStorage.setItem('meuargus_params', JSON.stringify(paramsState));
 }
 
 // ─── NAV ─────────────────────────────────────────────────
-const TABS = ['dashboard','bussola','lancamentos','previsao','importar'];
+const TABS = ['dashboard','indicadores','lancamentos','cobranca','insights','previsao','importar'];
 function showTab(id) {
   document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
   document.querySelectorAll('nav button').forEach(b => b.classList.remove('active'));
   document.getElementById('tab-' + id).classList.add('active');
   document.querySelectorAll('nav button')[TABS.indexOf(id)].classList.add('active');
   if (id === 'dashboard') renderDashboard();
-  if (id === 'bussola') renderBussola();
+  if (id === 'indicadores') renderIndicadores();
+  if (id === 'cobranca') renderCobranca();
+  if (id === 'insights') renderInsights();
   if (id === 'previsao') renderPrevisao();
   if (id === 'lancamentos') renderTable();
 }
@@ -584,8 +719,13 @@ function fmtDate(d) { if (!d) return '—'; const [y,m,dd] = d.split('-'); retur
 function today() { return new Date().toISOString().split('T')[0]; }
 function addDays(dateStr, n) { const d = new Date(dateStr + 'T12:00:00'); d.setDate(d.getDate() + n); return d.toISOString().split('T')[0]; }
 function uid() { return Math.random().toString(36).slice(2) + Date.now().toString(36); }
+function mesesDistintosPagos() {
+  const meses = new Set();
+  data.filter(r => r.status === 'pago' && r.vencimento).forEach(r => meses.add(r.vencimento.slice(0,7)));
+  return Math.max(1, meses.size);
+}
 
-// ─── DASHBOARD ───────────────────────────────────────────
+// ─── PAINEL ──────────────────────────────────────────────
 function renderDashboard() {
   const t = today(), t30 = addDays(t, 30);
   let saldo = 0, recv30 = 0, pag30 = 0;
@@ -601,7 +741,7 @@ function renderDashboard() {
   const cl = document.getElementById('card-liquido');
   cl.className = 'card ' + (liq >= 0 ? 'green' : 'red');
   renderChartFluxo();
-  renderInsights(saldo, recv30, pag30);
+  renderAlertas(saldo, recv30, pag30);
   document.getElementById('hd-subtitle').textContent = `${data.length} lançamentos · Saldo ${fmt(saldo)}`;
 }
 
@@ -620,29 +760,27 @@ function renderChartFluxo() {
     entradas.push(ent); saidas.push(sai); acum += ent - sai; saldoAcum.push(acum);
   }
   if (chartFluxo) chartFluxo.destroy();
-  const chartDefaults = {
-    color: '#B0A898',
-    borderColor: '#243447',
-    plugins: { legend: { labels: { color: '#B0A898', font: { family: 'Inter' }}}}
-  };
+  const isDark = document.documentElement.getAttribute('data-theme') === 'dark';
+  const tickColor = isDark ? '#7B9DC0' : '#64748B';
+  const gridColor = isDark ? '#1E2F45' : '#E2E8F0';
   chartFluxo = new Chart(document.getElementById('chartFluxo'), {
     type: 'bar',
     data: { labels, datasets: [
-      { label: 'Entradas', data: entradas, backgroundColor: 'rgba(74,222,128,0.55)', stack: 'a' },
-      { label: 'Saídas', data: saidas.map(v => -v), backgroundColor: 'rgba(248,113,113,0.55)', stack: 'a' },
+      { label: 'Entradas', data: entradas, backgroundColor: 'rgba(22,163,74,0.55)', stack: 'a' },
+      { label: 'Saídas', data: saidas.map(v => -v), backgroundColor: 'rgba(220,38,38,0.55)', stack: 'a' },
       { label: 'Saldo Acumulado', data: saldoAcum, type: 'line', borderColor: '#2563EB', backgroundColor: 'transparent', pointRadius: 2, tension: 0.3, yAxisID: 'y2', borderWidth: 2 }
     ]},
     options: { responsive: true, maintainAspectRatio: false,
-      plugins: { legend: { position: 'bottom', labels: { color: '#B0A898' }}, tooltip: { backgroundColor: '#162032', borderColor: '#243447', borderWidth: 1, titleColor: '#F0EDE8', bodyColor: '#B0A898', callbacks: { label: ctx => ctx.dataset.label + ': ' + fmt(Math.abs(ctx.raw)) }}},
+      plugins: { legend: { position: 'bottom', labels: { color: tickColor }}, tooltip: { callbacks: { label: ctx => ctx.dataset.label + ': ' + fmt(Math.abs(ctx.raw)) }}},
       scales: {
-        x: { stacked: true, ticks: { maxRotation: 45, font: { size: 10 }, color: '#B0A898' }, grid: { color: '#1E2F45' }},
-        y: { stacked: true, ticks: { callback: v => fmt(v), color: '#B0A898' }, grid: { color: '#1E2F45' }},
+        x: { stacked: true, ticks: { maxRotation: 45, font: { size: 10 }, color: tickColor }, grid: { color: gridColor }},
+        y: { stacked: true, ticks: { callback: v => fmt(v), color: tickColor }, grid: { color: gridColor }},
         y2: { position: 'right', grid: { drawOnChartArea: false }, ticks: { callback: v => fmt(v), color: '#2563EB' }}
       }}
   });
 }
 
-function renderInsights(saldo, recv30, pag30) {
+function renderAlertas(saldo, recv30, pag30) {
   const box = document.getElementById('insights-box');
   const t = today();
   const insights = [];
@@ -655,74 +793,213 @@ function renderInsights(saldo, recv30, pag30) {
   if (liq < 0) insights.push({cls:'bad',title:'📉 Fluxo negativo nos próximos 30 dias',body:`Saídas superam entradas em ${fmt(Math.abs(liq))}. Considere antecipar recebíveis ou postergar pagamentos.`});
   else if (liq > 0) insights.push({cls:'ok',title:'✅ Fluxo positivo nos próximos 30 dias',body:`Saldo previsto de +${fmt(liq)}. Boa saúde financeira no curto prazo.`});
   if (saldo + recv30 - pag30 < 0) insights.push({cls:'bad',title:'🚨 Caixa insuficiente previsto',body:`Com saldo atual + entradas − saídas, o caixa fica negativo em ${fmt(Math.abs(saldo+recv30-pag30))}.`});
-  if (insights.length === 0) insights.push({cls:'ok',title:'👍 Nenhum alerta no momento',body:'Adicione lançamentos para obter insights.'});
+  if (insights.length === 0) insights.push({cls:'ok',title:'👍 Nenhum alerta no momento',body:'Adicione lançamentos para obter alertas.'});
   box.innerHTML = insights.map(i=>`<div class="insight ${i.cls}"><strong>${i.title}</strong>${i.body}</div>`).join('');
 }
 
-// ─── BUSSOLA FINANCEIRA (TOC) ─────────────────────────────
-function renderBussola() {
-  document.getElementById('inv-total').value = bussolaState.investimento || '';
+// ─── INDICADORES ─────────────────────────────────────────
+function calcIndicadores() {
+  document.getElementById('p-selic').value = paramsState.selic || '';
+  document.getElementById('p-cartao').value = paramsState.cartao || '';
 
-  // G = receitas recebidas - CTV pago
   const receitasPagas = data.filter(r => r.tipo === 'receber' && r.status === 'pago').reduce((s,r)=>s+r.valor,0);
   const ctvPago = data.filter(r => r.tipo === 'pagar' && r.status === 'pago' && r.toc === 'ctv').reduce((s,r)=>s+r.valor,0);
   const doPago = data.filter(r => r.tipo === 'pagar' && r.status === 'pago' && r.toc !== 'ctv').reduce((s,r)=>s+r.valor,0);
+  const despesasTotais = ctvPago + doPago;
+  const LL = receitasPagas - despesasTotais;
+  const margem = receitasPagas > 0 ? (LL / receitasPagas * 100) : null;
 
-  // Pendentes próx 30d
   const t = today(), t30 = addDays(t, 30);
-  const recvPend = data.filter(r => r.tipo === 'receber' && r.status !== 'pago' && r.vencimento >= t && r.vencimento <= t30).reduce((s,r)=>s+r.valor,0);
-  const ctvPend = data.filter(r => r.tipo === 'pagar' && r.status !== 'pago' && r.toc === 'ctv' && r.vencimento >= t && r.vencimento <= t30).reduce((s,r)=>s+r.valor,0);
-  const doPend = data.filter(r => r.tipo === 'pagar' && r.status !== 'pago' && r.toc !== 'ctv' && r.vencimento >= t && r.vencimento <= t30).reduce((s,r)=>s+r.valor,0);
+  let saldo = 0;
+  data.filter(r => r.status === 'pago').forEach(r => { saldo += r.tipo === 'receber' ? r.valor : -r.valor; });
+  const recv30 = data.filter(r => r.tipo === 'receber' && r.status !== 'pago' && r.vencimento >= t && r.vencimento <= t30).reduce((s,r)=>s+r.valor,0);
+  const pag30  = data.filter(r => r.tipo === 'pagar'  && r.status !== 'pago' && r.vencimento >= t && r.vencimento <= t30).reduce((s,r)=>s+r.valor,0);
+  const liquidez = pag30 > 0 ? (saldo + recv30) / pag30 : null;
+  const capGiro = Math.max(0, pag30 - recv30 - saldo);
 
-  const G = receitasPagas - ctvPago;
-  const DO = doPago;
-  const LL = G - DO;
-  const inv = bussolaState.investimento;
-  const rsi = inv > 0 ? (LL * 12 / inv * 100) : null; // anualizado assumindo período mensal
+  const despesaMedia = despesasTotais / mesesDistintosPagos();
+  const folego = despesaMedia > 0 ? saldo / despesaMedia : null;
 
-  document.getElementById('b-ganho').textContent = fmt(G);
-  document.getElementById('b-do').textContent = fmt(DO);
-  document.getElementById('b-ll').textContent = fmtSgn(LL);
-  document.getElementById('b-card-ll').className = 'card ' + (LL >= 0 ? 'green' : 'red');
-  document.getElementById('b-rsi').textContent = rsi !== null ? rsi.toFixed(1) + '% a.a.' : '—';
-  document.getElementById('b-ctv').textContent = fmt(ctvPago);
+  return { receitasPagas, ctvPago, doPago, despesasTotais, LL, margem, saldo, recv30, pag30, liquidez, capGiro, folego };
+}
 
-  // 3 Perguntas da TOC
-  const G_prev = recvPend - ctvPend;
-  const DO_prev = doPend;
-  const LL_prev = G_prev - DO_prev;
-  document.getElementById('toc-questions').innerHTML = `
-    <div class="toc-q ${G_prev > 0 ? 'up' : G_prev < 0 ? 'down' : 'neutral'}">
-      <div class="q-icon">🟢</div>
-      <div class="q-label">1. O Ganho está aumentando?</div>
-      <div class="q-val">${fmtSgn(G_prev)}</div>
-      <div style="font-size:0.8rem;color:var(--gray);margin-top:4px">Ganho previsto próx. 30d<br>(Receitas − CTV pendentes)</div>
-    </div>
-    <div class="toc-q ${DO_prev <= 0 ? 'up' : 'down'}">
-      <div class="q-icon">🔵</div>
-      <div class="q-label">2. O Investimento / DO está diminuindo?</div>
-      <div class="q-val">${fmt(DO_prev)} em DO</div>
-      <div style="font-size:0.8rem;color:var(--gray);margin-top:4px">DO pendente próx. 30d<br>(Despesas operacionais fixas)</div>
-    </div>
-    <div class="toc-q ${LL_prev > 0 ? 'up' : LL_prev < 0 ? 'down' : 'neutral'}">
-      <div class="q-icon">💡</div>
-      <div class="q-label">3. Lucro Líquido previsto</div>
-      <div class="q-val">${fmtSgn(LL_prev)}</div>
-      <div style="font-size:0.8rem;color:var(--gray);margin-top:4px">G previsto − DO prevista<br>próximos 30 dias</div>
-    </div>`;
+function renderIndicadores() {
+  const k = calcIndicadores();
 
-  // Bussola insights
-  const ins = [];
-  if (G < DO) ins.push({cls:'bad',title:'📉 Ganho menor que a Despesa Operacional',body:`O Ganho (${fmt(G)}) não cobre a DO (${fmt(DO)}). A empresa está consumindo patrimônio. Segundo a Bússola Financeira, a prioridade é aumentar o Ganho explorando a restrição.`});
-  else if (G > DO) ins.push({cls:'ok',title:'✅ Ganho cobre a Despesa Operacional',body:`Lucro Líquido positivo de ${fmt(LL)}. A empresa está gerando valor. Foco: continuar aumentando o Ganho.`});
-  if (rsi !== null) {
-    if (rsi < 10) ins.push({cls:'warn',title:'⚠️ RSI abaixo de 10% a.a.',body:`RSI de ${rsi.toFixed(1)}% a.a. Avalie se o retorno justifica o investimento.`});
-    else if (rsi >= 20) ins.push({cls:'ok',title:'💰 RSI saudável',body:`RSI de ${rsi.toFixed(1)}% a.a. O investimento está sendo bem remunerado.`});
+  document.getElementById('k-receita').textContent = fmt(k.receitasPagas);
+  document.getElementById('k-ll').textContent = fmtSgn(k.LL);
+  document.getElementById('k-card-ll').className = 'card ' + (k.LL >= 0 ? 'green' : 'red');
+
+  const margemEl = document.getElementById('k-margem');
+  const margemCard = document.getElementById('k-card-margem');
+  if (k.margem === null) { margemEl.textContent = '—'; margemCard.className = 'card'; }
+  else {
+    margemEl.textContent = k.margem.toFixed(1) + '%';
+    margemCard.className = 'card ' + (k.margem >= 25 ? 'green' : k.margem >= 0 ? 'amber' : 'red');
   }
-  if (ctvPago === 0 && data.filter(r=>r.tipo==='pagar'&&r.status==='pago').length > 0)
-    ins.push({cls:'info',title:'ℹ️ Classifique seus custos (TOC)',body:`Nenhum custo foi classificado como CTV. Vá à aba "Classificação TOC" abaixo e separe custos variáveis (CTV) dos fixos (DO) para calcular o Ganho com precisão.`});
-  if (ins.length === 0) ins.push({cls:'info',title:'ℹ️ Adicione lançamentos e defina o investimento',body:'Registre receitas e despesas e informe o Investimento total para ativar os indicadores da Bússola Financeira.'});
-  document.getElementById('bussola-insights').innerHTML = ins.map(i=>`<div class="insight ${i.cls}"><strong>${i.title}</strong>${i.body}</div>`).join('');
+
+  const liquidezEl = document.getElementById('k-liquidez');
+  const liquidezCard = document.getElementById('k-card-liquidez');
+  if (k.liquidez === null) { liquidezEl.textContent = 'sem contas a pagar'; liquidezCard.className = 'card green'; }
+  else {
+    liquidezEl.textContent = k.liquidez.toFixed(2) + 'x';
+    liquidezCard.className = 'card ' + (k.liquidez >= 1.5 ? 'green' : k.liquidez >= 1 ? 'amber' : 'red');
+  }
+
+  document.getElementById('k-capgiro').textContent = fmt(k.capGiro);
+
+  const folegoEl = document.getElementById('k-folego');
+  const folegoCard = document.getElementById('k-card-folego');
+  if (k.folego === null) { folegoEl.textContent = '—'; folegoCard.className = 'card'; }
+  else {
+    folegoEl.textContent = k.folego.toFixed(1) + ' meses';
+    folegoCard.className = 'card ' + (k.folego >= 6 ? 'green' : k.folego >= 3 ? 'amber' : 'red');
+  }
+}
+
+// ─── COBRANÇA (régua de cobrança) ───────────────────────
+function diasAtraso(vencimento) {
+  const hoje = new Date(today() + 'T12:00:00');
+  const venc = new Date(vencimento + 'T12:00:00');
+  return Math.round((hoje - venc) / 86400000);
+}
+
+function renderCobranca() {
+  document.getElementById('tpl-lembrete').value = templatesState.lembrete;
+  document.getElementById('tpl-vencimento').value = templatesState.vencimento;
+  document.getElementById('tpl-vencido').value = templatesState.vencido;
+
+  const aVencer = data.filter(r => r.tipo === 'receber' && r.status !== 'pago' && diasAtraso(r.vencimento) <= 0 && diasAtraso(r.vencimento) >= -3)
+    .map(r => ({ ...r, dias: diasAtraso(r.vencimento) }))
+    .sort((a,b) => b.dias - a.dias);
+  const tbA = document.getElementById('tb-avencer');
+  if (aVencer.length === 0) {
+    tbA.innerHTML = `<tr><td colspan="5" class="empty">Nada vencendo nos próximos 3 dias.</td></tr>`;
+  } else {
+    tbA.innerHTML = aVencer.map(r => `
+      <tr>
+        <td>${r.contraparte || '—'}</td>
+        <td>${r.descricao}</td>
+        <td>${r.dias === 0 ? '<strong>Hoje</strong>' : fmtDate(r.vencimento)}</td>
+        <td>${fmt(r.valor)}</td>
+        <td>${acaoCobranca(r, r.dias === 0 ? 'vencimento' : 'lembrete', r.dias)}</td>
+      </tr>`).join('');
+  }
+
+  const vencidos = data.filter(r => r.tipo === 'receber' && r.status !== 'pago' && diasAtraso(r.vencimento) > 0)
+    .map(r => ({ ...r, dias: diasAtraso(r.vencimento) }))
+    .sort((a,b) => b.dias - a.dias);
+
+  const faixas = [
+    { label: '1 a 15 dias',  min: 1,  max: 15 },
+    { label: '16 a 30 dias', min: 16, max: 30 },
+    { label: '31 a 60 dias', min: 31, max: 60 },
+    { label: 'Mais de 60 dias', min: 61, max: Infinity },
+  ];
+  const cardsHtml = faixas.map(f => {
+    const itens = vencidos.filter(r => r.dias >= f.min && r.dias <= f.max);
+    const total = itens.reduce((s,r)=>s+r.valor,0);
+    const cls = f.min >= 61 ? 'red' : f.min >= 31 ? 'red' : f.min >= 16 ? 'amber' : 'amber';
+    return `<div class="card ${itens.length ? cls : ''}"><label>${f.label}</label><div class="val">${fmt(total)}</div><div class="sub">${itens.length} lançamento(s)</div></div>`;
+  }).join('');
+  document.getElementById('aging-cards').innerHTML = cardsHtml;
+
+  const tbV = document.getElementById('tb-vencidos');
+  if (vencidos.length === 0) {
+    tbV.innerHTML = `<tr><td colspan="6" class="empty">Nenhuma conta a receber vencida. 🎉</td></tr>`;
+  } else {
+    tbV.innerHTML = vencidos.map(r => `
+      <tr>
+        <td>${r.contraparte || '—'}</td>
+        <td>${r.descricao}</td>
+        <td style="color:var(--red);font-weight:600">${fmtDate(r.vencimento)}</td>
+        <td style="color:var(--red);font-weight:600">${r.dias} dia(s)</td>
+        <td>${fmt(r.valor)}</td>
+        <td>${acaoCobranca(r, 'vencido', r.dias)}</td>
+      </tr>`).join('');
+  }
+
+  // Classificação de pagadores
+  const porCliente = {};
+  data.filter(r => r.tipo === 'receber' && r.contraparte).forEach(r => {
+    const c = r.contraparte;
+    if (!porCliente[c]) porCliente[c] = { recebido: 0, aberto: 0, maiorAtraso: 0 };
+    if (r.status === 'pago') porCliente[c].recebido += r.valor;
+    else {
+      porCliente[c].aberto += r.valor;
+      const d = diasAtraso(r.vencimento);
+      if (d > porCliente[c].maiorAtraso) porCliente[c].maiorAtraso = d;
+    }
+  });
+  const clientes = Object.entries(porCliente).sort((a,b) => b[1].maiorAtraso - a[1].maiorAtraso);
+  const tbP = document.getElementById('tb-pagadores');
+  if (clientes.length === 0) {
+    tbP.innerHTML = `<tr><td colspan="5" class="empty">Preencha o campo Cliente nas contas a receber para ver a classificação de pagadores.</td></tr>`;
+  } else {
+    tbP.innerHTML = clientes.map(([nome, c]) => {
+      let status, cls;
+      if (c.maiorAtraso > 30) { status = 'Inadimplente'; cls = 'pagar'; }
+      else if (c.maiorAtraso > 0) { status = 'Atenção'; cls = 'ctv'; }
+      else { status = 'Em dia'; cls = 'receber'; }
+      return `<tr>
+        <td>${nome}</td>
+        <td>${fmt(c.recebido)}</td>
+        <td>${fmt(c.aberto)}</td>
+        <td>${c.maiorAtraso > 0 ? c.maiorAtraso + ' dia(s)' : '—'}</td>
+        <td><span class="badge ${cls}">${status}</span></td>
+      </tr>`;
+    }).join('');
+  }
+}
+
+// ─── INSIGHTS (agentes especialistas) ───────────────────
+function renderInsights() {
+  const k = calcIndicadores();
+  const box = document.getElementById('agents-box');
+  const cards = [];
+
+  // Agente de Rentabilidade
+  if (k.margem === null) {
+    cards.push({ icon:'💰', nome:'Agente de Rentabilidade', cls:'warn', msg:'Ainda não há receita recebida suficiente para calcular a margem líquida. Registre e marque como pagos os lançamentos de receita.' });
+  } else if (k.margem < 0) {
+    cards.push({ icon:'💰', nome:'Agente de Rentabilidade', cls:'bad', msg:`Margem líquida negativa (${k.margem.toFixed(1)}%): as despesas pagas superam a receita recebida. Antes de qualquer outra decisão, é preciso reverter esse quadro — corte custos variáveis ou renegocie despesas fixas.` });
+  } else if (k.margem < 25) {
+    cards.push({ icon:'💰', nome:'Agente de Rentabilidade', cls:'warn', msg:`Margem líquida de ${k.margem.toFixed(1)}%, abaixo da meta mínima de 25% considerada saudável para o negócio. Faltam ${(25-k.margem).toFixed(1)} pontos percentuais — avalie preço, mix de produtos ou custo variável (hoje ${fmt(k.ctvPago)}).` });
+  } else {
+    cards.push({ icon:'💰', nome:'Agente de Rentabilidade', cls:'ok', msg:`Margem líquida de ${k.margem.toFixed(1)}%, acima da meta mínima de 25%. O negócio está gerando valor de forma saudável — foco agora em manter a disciplina de custos enquanto cresce.` });
+  }
+
+  // Agente de Caixa
+  if (k.liquidez !== null && k.liquidez < 1) {
+    cards.push({ icon:'🏦', nome:'Agente de Caixa', cls:'bad', msg:`Índice de liquidez de ${k.liquidez.toFixed(2)}x: o saldo atual mais o que entra em 30 dias não cobre o que precisa ser pago no período. Negocie prazos com fornecedores ou antecipe recebíveis.` });
+  } else if (k.folego !== null && k.folego < 3) {
+    cards.push({ icon:'🏦', nome:'Agente de Caixa', cls:'warn', msg:`O caixa atual sustenta a operação por cerca de ${k.folego.toFixed(1)} meses no ritmo atual de despesas. Menos de 3 meses de fôlego é um sinal de alerta — vale reforçar o colchão de caixa.` });
+  } else {
+    cards.push({ icon:'🏦', nome:'Agente de Caixa', cls:'ok', msg: k.folego !== null ? `Fôlego de caixa de ${k.folego.toFixed(1)} meses e liquidez saudável. A operação tem margem de manobra para imprevistos de curto prazo.` : 'Sem despesas pagas registradas ainda para estimar o fôlego de caixa — continue lançando os pagamentos conforme eles acontecem.' });
+  }
+
+  // Agente de Custo de Capital
+  const selic = paramsState.selic || 0;
+  const cartaoAnual = (paramsState.cartao || 0) * 12;
+  if (paramsState.cartao > 0 && selic > 0) {
+    const diferenca = cartaoAnual - selic;
+    if (diferenca > 0) {
+      cards.push({ icon:'💳', nome:'Agente de Custo de Capital', cls:'warn', msg:`A taxa de cartão informada (${paramsState.cartao.toFixed(2)}% a.m., ≈ ${cartaoAnual.toFixed(1)}% a.a.) é ${diferenca.toFixed(1)} pontos percentuais mais cara que a Selic (${selic.toFixed(2)}% a.a.). Antes de antecipar recebíveis pelo cartão, compare com uma linha de crédito bancária referenciada na Selic — pode sair mais barato.` });
+    } else {
+      cards.push({ icon:'💳', nome:'Agente de Custo de Capital', cls:'ok', msg:`A taxa de cartão informada (≈ ${cartaoAnual.toFixed(1)}% a.a.) está próxima ou abaixo da Selic (${selic.toFixed(2)}% a.a.) — antecipar recebíveis pelo cartão não parece estar mais caro do que outras fontes de crédito.` });
+    }
+  } else {
+    cards.push({ icon:'💳', nome:'Agente de Custo de Capital', cls:'info', msg:'Informe a Selic e a taxa de cartão nos Parâmetros de Referência (aba Indicadores) para comparar o custo de antecipar recebíveis com outras fontes de crédito.' });
+  }
+  if (paramsState.cartao > 0) {
+    cards.push({ icon:'📊', nome:'Agente de Custo de Capital', cls:'info', msg:`Ao aceitar antecipação de recebíveis via cartão, compare o custo (${paramsState.cartao.toFixed(2)}% a.m.) com sua margem líquida (${k.margem !== null ? k.margem.toFixed(1)+'%' : '—'}) antes de repassar ao cliente ou absorver a taxa.` });
+  }
+
+  box.innerHTML = cards.map(c => `
+    <div class="agent-card ${c.cls}">
+      <div class="agent-icon">${c.icon}</div>
+      <div><div class="agent-name">${c.nome}</div><div class="agent-msg">${c.msg}</div></div>
+    </div>`).join('');
 
   // Classification table
   const pagarItems = data.filter(r => r.tipo === 'pagar');
@@ -738,9 +1015,9 @@ function renderBussola() {
       <td>${fmt(r.valor)}</td>
       <td>${r.status === 'pago' ? '✅ Pago' : '⏳ Pendente'}</td>
       <td>
-        <select onchange="setToc('${r.id}', this.value)" style="padding:5px 8px;border:1px solid var(--navy-border);border-radius:6px;font-size:0.82rem;background:var(--surface2);color:var(--text);font-family:Inter,sans-serif">
-          <option value="do" ${r.toc !== 'ctv' ? 'selected' : ''}>DO — Despesa Operacional</option>
-          <option value="ctv" ${r.toc === 'ctv' ? 'selected' : ''}>CTV — Custo Variável</option>
+        <select onchange="setToc('${r.id}', this.value)" style="padding:5px 8px;border:1px solid var(--border);border-radius:6px;font-size:0.82rem;background:var(--surface);color:var(--text);font-family:Inter,sans-serif">
+          <option value="do" ${r.toc !== 'ctv' ? 'selected' : ''}>Fixo</option>
+          <option value="ctv" ${r.toc === 'ctv' ? 'selected' : ''}>Variável</option>
         </select>
       </td>
     </tr>`).join('');
@@ -750,13 +1027,16 @@ async function setToc(id, val) {
   const r = data.find(r => r.id === id);
   if (!r) return;
   const ok = await _update(id, { toc: val });
-  if (ok) { r.toc = val; renderBussola(); }
+  if (ok) { r.toc = val; renderInsights(); renderIndicadores(); }
 }
 
 // ─── FORM ────────────────────────────────────────────────
 function toggleTocClass() {
   const isPagar = document.getElementById('f-tipo').value === 'pagar';
   document.getElementById('toc-class-label').style.display = isPagar ? 'flex' : 'none';
+  const cpLabel = document.getElementById('contraparte-label');
+  cpLabel.childNodes[0].textContent = isPagar ? 'Fornecedor' : 'Cliente';
+  document.getElementById('f-contraparte').placeholder = isPagar ? 'Nome do fornecedor' : 'Nome do cliente';
 }
 
 async function addLancamento() {
@@ -765,12 +1045,14 @@ async function addLancamento() {
   const valor = parseFloat(document.getElementById('f-valor').value);
   const venc = document.getElementById('f-venc').value;
   const cat = document.getElementById('f-cat').value.trim();
+  const contraparte = document.getElementById('f-contraparte').value.trim();
+  const telefone = document.getElementById('f-telefone').value.trim();
   const rec = document.getElementById('f-rec').value;
   const toc = tipo === 'pagar' ? document.getElementById('f-toc').value : 'na';
   if (!desc) { alert('Informe a descrição.'); return; }
   if (!valor || valor <= 0) { alert('Informe um valor válido.'); return; }
   if (!venc) { alert('Informe o vencimento.'); return; }
-  const base = { tipo, descricao: desc, valor, vencimento: venc, categoria: cat || null, status: 'pendente', recorrencia: rec, toc, subscriber_id: currentUser.id };
+  const base = { tipo, descricao: desc, valor, vencimento: venc, categoria: cat || null, contraparte: contraparte || null, contraparte_telefone: telefone || null, status: 'pendente', recorrencia: rec, toc, origem: 'manual', subscriber_id: currentUser.id };
   const items = [{ ...base }];
   if (rec !== 'none') {
     const steps = { semanal:7, quinzenal:15, mensal:30 };
@@ -784,7 +1066,7 @@ async function addLancamento() {
 }
 
 function clearForm() {
-  ['f-desc','f-valor','f-venc','f-cat'].forEach(id => document.getElementById(id).value = '');
+  ['f-desc','f-valor','f-venc','f-cat','f-contraparte','f-telefone'].forEach(id => document.getElementById(id).value = '');
   document.getElementById('f-tipo').value = 'receber';
   document.getElementById('f-rec').value = 'none';
   document.getElementById('f-toc').value = 'do';
@@ -805,14 +1087,15 @@ function renderTable() {
   }).sort((a,b) => (a.vencimento||'') < (b.vencimento||'') ? -1 : 1);
 
   const tb = document.getElementById('tb-body');
-  if (rows.length === 0) { tb.innerHTML = `<tr><td colspan="8" class="empty">Nenhum lançamento encontrado.</td></tr>`; return; }
+  if (rows.length === 0) { tb.innerHTML = `<tr><td colspan="9" class="empty">Nenhum lançamento encontrado.</td></tr>`; return; }
   tb.innerHTML = rows.map(r => {
     const vencido = r.vencimento < t && r.status !== 'pago';
-    const tocBadge = r.tipo === 'pagar' ? `<span class="badge ${r.toc||'do'}">${r.toc === 'ctv' ? 'CTV' : 'DO'}</span>` : '—';
+    const tocBadge = r.tipo === 'pagar' ? `<span class="badge ${r.toc||'do'}">${r.toc === 'ctv' ? 'Variável' : 'Fixo'}</span>` : '—';
     return `<tr class="${r.status==='pago'?'row-paid':''}">
       <td><span class="badge ${r.tipo}">${r.tipo==='receber'?'Receber':'Pagar'}</span></td>
       <td>${r.descricao}${r.recorrencia&&r.recorrencia!=='none'?` <span class="tag-status">↻${r.recorrencia}</span>`:''}</td>
       <td>${r.categoria||'—'}</td>
+      <td>${r.contraparte||'—'}</td>
       <td style="${vencido?'color:var(--red);font-weight:600':''}">${fmtDate(r.vencimento)}</td>
       <td>${fmt(r.valor)}</td>
       <td>${tocBadge}</td>
@@ -852,16 +1135,19 @@ function renderPrevisao() {
   });
   const labels = rows.map(r => { const [y,m] = r.mk.split('-'); return ['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'][+m-1]+'/'+y.slice(2); });
   if (chartPrevisao) chartPrevisao.destroy();
+  const isDark = document.documentElement.getAttribute('data-theme') === 'dark';
+  const tickColor = isDark ? '#7B9DC0' : '#64748B';
+  const gridColor = isDark ? '#1E2F45' : '#E2E8F0';
   chartPrevisao = new Chart(document.getElementById('chartPrevisao'), {
     type: 'bar',
     data: { labels, datasets: [
-      { label: 'Entradas', data: rows.map(r=>r.ent), backgroundColor: 'rgba(74,222,128,0.55)' },
-      { label: 'Saídas', data: rows.map(r=>r.sai), backgroundColor: 'rgba(248,113,113,0.55)' },
+      { label: 'Entradas', data: rows.map(r=>r.ent), backgroundColor: 'rgba(22,163,74,0.55)' },
+      { label: 'Saídas', data: rows.map(r=>r.sai), backgroundColor: 'rgba(220,38,38,0.55)' },
       { label: 'Saldo Acum.', data: rows.map(r=>r.acum), type: 'line', borderColor: '#2563EB', borderWidth: 2, backgroundColor: 'transparent', tension: 0.3 }
     ]},
     options: { responsive:true, maintainAspectRatio:false,
-      plugins:{ legend:{position:'bottom', labels:{color:'#B0A898'}}, tooltip:{backgroundColor:'#162032',borderColor:'#243447',borderWidth:1,titleColor:'#F0EDE8',bodyColor:'#B0A898',callbacks:{label:ctx=>ctx.dataset.label+': '+fmt(ctx.raw)}}},
-      scales:{y:{ticks:{callback:v=>fmt(v),color:'#B0A898'},grid:{color:'#1E2F45'}},x:{ticks:{color:'#B0A898'},grid:{color:'#1E2F45'}}}
+      plugins:{ legend:{position:'bottom', labels:{color:tickColor}}, tooltip:{callbacks:{label:ctx=>ctx.dataset.label+': '+fmt(ctx.raw)}}},
+      scales:{y:{ticks:{callback:v=>fmt(v),color:tickColor},grid:{color:gridColor}},x:{ticks:{color:tickColor},grid:{color:gridColor}}}
     }
   });
   document.getElementById('tb-forecast').innerHTML = rows.map((r,i) => `
@@ -882,8 +1168,8 @@ function parseCSV(text) {
   if (lines.length < 2) { alert('Arquivo vazio.'); return; }
   const sep = lines[0].includes(';') ? ';' : ',';
   const headers = lines[0].split(sep).map(h => h.trim().toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,''));
-  const col = k => { const alts = {tipo:['tipo','type'],descricao:['descricao','descrição','desc','description'],valor:['valor','value','amount'],vencimento:['vencimento','data','due','due_date'],categoria:['categoria','category','cat'],toc:['toc','classificacao','class']}; for(const a of (alts[k]||[k])){ const i=headers.indexOf(a); if(i>=0) return i; } return -1; };
-  const ci = {tipo:col('tipo'),desc:col('descricao'),valor:col('valor'),venc:col('vencimento'),cat:col('categoria'),toc:col('toc')};
+  const col = k => { const alts = {tipo:['tipo','type'],descricao:['descricao','descrição','desc','description'],valor:['valor','value','amount'],vencimento:['vencimento','data','due','due_date'],categoria:['categoria','category','cat'],toc:['toc','custo','classificacao','class'],contraparte:['cliente','fornecedor','contraparte','client','supplier'],telefone:['telefone','whatsapp','phone','celular']}; for(const a of (alts[k]||[k])){ const i=headers.indexOf(a); if(i>=0) return i; } return -1; };
+  const ci = {tipo:col('tipo'),desc:col('descricao'),valor:col('valor'),venc:col('vencimento'),cat:col('categoria'),toc:col('toc'),cp:col('contraparte'),tel:col('telefone')};
   if (ci.tipo<0||ci.desc<0||ci.valor<0||ci.venc<0) { alert('Colunas obrigatórias não encontradas: tipo, descricao, valor, vencimento'); return; }
   pendingImport = [];
   for (let i=1;i<lines.length;i++) {
@@ -895,17 +1181,21 @@ function parseCSV(text) {
     let venc = (c[ci.venc]||'').trim();
     if (/\d{2}\/\d{2}\/\d{4}/.test(venc)) venc = venc.split('/').reverse().join('-');
     const cat = ci.cat>=0?(c[ci.cat]||'').trim():'';
-    const toc = ci.toc>=0?(c[ci.toc]||'do').trim().toLowerCase():'do';
+    const contraparte = ci.cp>=0?(c[ci.cp]||'').trim():'';
+    const telefone = ci.tel>=0?(c[ci.tel]||'').trim():'';
+    let toc = ci.toc>=0?(c[ci.toc]||'do').trim().toLowerCase():'do';
+    if (toc === 'variavel' || toc === 'variável') toc = 'ctv';
+    if (toc === 'fixo') toc = 'do';
     if (!['pagar','receber'].includes(tipo)||!desc||!valor||!venc) continue;
-    pendingImport.push({id:uid(),tipo,descricao:desc,valor,vencimento:venc,categoria:cat,status:'pendente',recorrencia:'none',toc});
+    pendingImport.push({id:uid(),tipo,descricao:desc,valor,vencimento:venc,categoria:cat,contraparte:contraparte||null,contraparte_telefone:telefone||null,status:'pendente',recorrencia:'none',toc,origem:'importado'});
   }
   if (!pendingImport.length) { alert('Nenhum registro válido.'); return; }
   document.getElementById('import-result').style.display='block';
   document.getElementById('import-msg').textContent = `${pendingImport.length} registro(s) encontrado(s). Revise e confirme:`;
   const tbl = document.getElementById('import-preview');
-  tbl.querySelector('thead').innerHTML='<tr><th>Tipo</th><th>Descrição</th><th>Vencimento</th><th>Valor</th><th>TOC</th></tr>';
+  tbl.querySelector('thead').innerHTML='<tr><th>Tipo</th><th>Descrição</th><th>Vencimento</th><th>Valor</th><th>Custo</th></tr>';
   tbl.querySelector('tbody').innerHTML = pendingImport.slice(0,20).map(r =>
-    `<tr><td><span class="badge ${r.tipo}">${r.tipo}</span></td><td>${r.descricao}</td><td>${fmtDate(r.vencimento)}</td><td>${fmt(r.valor)}</td><td><span class="badge ${r.toc}">${r.toc.toUpperCase()}</span></td></tr>`
+    `<tr><td><span class="badge ${r.tipo}">${r.tipo}</span></td><td>${r.descricao}</td><td>${fmtDate(r.vencimento)}</td><td>${fmt(r.valor)}</td><td><span class="badge ${r.toc}">${r.toc==='ctv'?'VARIÁVEL':'FIXO'}</span></td></tr>`
   ).join('') + (pendingImport.length>20?`<tr><td colspan="5" class="empty">...e mais ${pendingImport.length-20} registros</td></tr>`:'');
 }
 async function confirmImport() {
@@ -919,19 +1209,21 @@ async function confirmImport() {
 }
 function cancelImport() { document.getElementById('import-result').style.display='none'; document.getElementById('file-input').value=''; }
 function downloadTemplate() {
-  const csv='tipo,descricao,valor,vencimento,categoria,toc\nreceber,Venda produto A,1500.00,01/07/2026,Vendas,na\npagar,Aluguel,2000.00,05/07/2026,Infraestrutura,do\npagar,Matéria-prima,800.00,10/07/2026,Produção,ctv\n';
-  const a=document.createElement('a'); a.href='data:text/csv;charset=utf-8,'+encodeURIComponent(csv); a.download='modelo-bussola-financeira.csv'; a.click();
+  const csv='tipo,descricao,valor,vencimento,categoria,custo,cliente\nreceber,Venda produto A,1500.00,01/07/2026,Vendas,,Cliente Exemplo Ltda\npagar,Aluguel,2000.00,05/07/2026,Infraestrutura,fixo,\npagar,Matéria-prima,800.00,10/07/2026,Produção,variavel,\n';
+  const a=document.createElement('a'); a.href='data:text/csv;charset=utf-8,'+encodeURIComponent(csv); a.download='modelo-meuargus.csv'; a.click();
 }
 
 // ─── INIT ────────────────────────────────────────────────
 document.getElementById('f-venc').value = today();
 toggleTocClass();
-initAuth(); // verifica sessão e carrega do Supabase se autenticado
+initAuth();
 
 function refreshAll() {
   renderDashboard();
   renderTable();
-  if (document.getElementById('tab-bussola').classList.contains('active')) renderBussola();
+  if (document.getElementById('tab-indicadores').classList.contains('active')) renderIndicadores();
+  if (document.getElementById('tab-cobranca').classList.contains('active')) renderCobranca();
+  if (document.getElementById('tab-insights').classList.contains('active')) renderInsights();
   if (document.getElementById('tab-previsao').classList.contains('active')) renderPrevisao();
 }
 </script>
