@@ -212,8 +212,8 @@
     <h1>MeuArgus</h1>
     <p>Acesso Administrativo</p>
     <div class="login-field">
-      <label>Usuário</label>
-      <input type="text" id="login-user" placeholder="admin" autocomplete="username">
+      <label>E-mail</label>
+      <input type="email" id="login-user" placeholder="voce@meuargus.com" autocomplete="username">
     </div>
     <div class="login-field">
       <label>Senha</label>
@@ -270,7 +270,6 @@
       </label>
       <div class="spacer"></div>
       <button class="btn btn-outline" onclick="exportCSV()" style="margin-top:auto">⬇ CSV</button>
-      <button class="btn btn-gold"    onclick="openModal()"  style="margin-top:auto">+ Novo</button>
     </div>
 
     <div class="table-card">
@@ -363,11 +362,8 @@
 // ══════════════════════════════════════════════
 // ⚙️  CONFIGURAÇÃO — cole suas credenciais aqui
 // ══════════════════════════════════════════════
-const SUPABASE_URL  = 'COLE_SUA_URL_AQUI';       // Ex: https://xyzxyz.supabase.co
-const SUPABASE_KEY  = 'COLE_SUA_ANON_KEY_AQUI';  // Project Settings → API → anon public
-
-// Credenciais de acesso admin (mude antes de publicar!)
-const CREDENTIALS = { admin: 'meuargus2024' };
+const SUPABASE_URL  = 'https://ijbzdhpfhusckvoecdjw.supabase.co';
+const SUPABASE_KEY  = 'sb_publishable_hJhexGzbi1soGSnlXwgQMA_wkQG9_yk';
 // ══════════════════════════════════════════════
 
 const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
@@ -384,25 +380,46 @@ function fmtDate(d) { if (!d) return '—'; const [y,m,dd] = d.split('-'); retur
 function initials(n) { return n.split(' ').slice(0,2).map(w=>w[0]||'').join('').toUpperCase(); }
 
 // ── AUTH ─────────────────────────────────────
-function doLogin() {
-  const u = document.getElementById('login-user').value.trim();
-  const p = document.getElementById('login-pass').value;
-  if (CREDENTIALS[u] && CREDENTIALS[u] === p) {
-    sessionStorage.setItem('admin_logged', u);
-    document.getElementById('login-screen').style.display = 'none';
-    document.getElementById('app').style.display = 'block';
-    document.getElementById('admin-name').textContent = u;
-    loadAll();
-  } else {
-    document.getElementById('login-error').style.display = 'block';
-  }
+function showLoginError(msg) {
+  const el = document.getElementById('login-error');
+  el.textContent = msg;
+  el.style.display = 'block';
 }
-function doLogout() { sessionStorage.removeItem('admin_logged'); location.reload(); }
-if (sessionStorage.getItem('admin_logged')) {
+
+async function doLogin() {
+  const email = document.getElementById('login-user').value.trim();
+  const pass = document.getElementById('login-pass').value;
+  document.getElementById('login-error').style.display = 'none';
+  if (!email || !pass) { showLoginError('Informe e-mail e senha.'); return; }
+
+  showLoading(true);
+  const { data, error } = await sb.auth.signInWithPassword({ email, password: pass });
+  if (error) { showLoading(false); showLoginError('E-mail ou senha incorretos.'); return; }
+
+  const ok = await checkAdminAndEnter(data.user);
+  showLoading(false);
+  if (!ok) { await sb.auth.signOut(); showLoginError('Acesso restrito a administradores.'); }
+}
+
+async function checkAdminAndEnter(user) {
+  const { data: profile, error } = await sb.from('subscribers').select('is_admin,nome,email').eq('id', user.id).single();
+  if (error || !profile || !profile.is_admin) return false;
   document.getElementById('login-screen').style.display = 'none';
   document.getElementById('app').style.display = 'block';
-  document.getElementById('admin-name').textContent = sessionStorage.getItem('admin_logged');
+  document.getElementById('admin-name').textContent = profile.nome || profile.email;
+  loadAll();
+  return true;
 }
+
+async function doLogout() { await sb.auth.signOut(); location.reload(); }
+
+(async function initAdminAuth() {
+  const { data: { session } } = await sb.auth.getSession();
+  if (session) {
+    const ok = await checkAdminAndEnter(session.user);
+    if (!ok) await sb.auth.signOut();
+  }
+})();
 
 // ── STATE ────────────────────────────────────
 let all = [];          // todos do Supabase
@@ -511,32 +528,26 @@ function goPage(p) {
 
 // ── SUPABASE: SAVE ────────────────────────────
 function openModal(id) {
-  editingId = id || null;
-  document.getElementById('modal-title').textContent = id ? 'Editar Assinante' : 'Novo Assinante';
-  if (id) {
-    const s = all.find(x=>x.id===id);
-    document.getElementById('f-id').value       = s.id;
-    document.getElementById('f-nome').value     = s.nome;
-    document.getElementById('f-email').value    = s.email;
-    document.getElementById('f-tel').value      = s.tel||'';
-    document.getElementById('f-empresa').value  = s.empresa||'';
-    document.getElementById('f-plano').value    = s.plano;
-    document.getElementById('f-status').value   = s.status;
-    document.getElementById('f-cadastro').value = s.cadastro||'';
-    document.getElementById('f-expira').value   = s.expira||'';
-    document.getElementById('f-obs').value      = s.obs||'';
-  } else {
-    ['f-nome','f-email','f-tel','f-empresa','f-obs'].forEach(x=>document.getElementById(x).value='');
-    document.getElementById('f-plano').value    = 'free';
-    document.getElementById('f-status').value   = 'ativo';
-    document.getElementById('f-cadastro').value = today();
-    document.getElementById('f-expira').value   = '';
-  }
+  if (!id) return; // contas nascem via cadastro próprio (signup) em /app
+  editingId = id;
+  document.getElementById('modal-title').textContent = 'Editar Assinante';
+  const s = all.find(x=>x.id===id);
+  document.getElementById('f-id').value       = s.id;
+  document.getElementById('f-nome').value     = s.nome;
+  document.getElementById('f-email').value    = s.email;
+  document.getElementById('f-tel').value      = s.tel||'';
+  document.getElementById('f-empresa').value  = s.empresa||'';
+  document.getElementById('f-plano').value    = s.plano;
+  document.getElementById('f-status').value   = s.status;
+  document.getElementById('f-cadastro').value = s.cadastro||'';
+  document.getElementById('f-expira').value   = s.expira||'';
+  document.getElementById('f-obs').value      = s.obs||'';
   document.getElementById('modal-form').classList.add('open');
 }
 function closeModal() { document.getElementById('modal-form').classList.remove('open'); }
 
 async function saveSubscriber() {
+  if (!editingId) return;
   const nome  = document.getElementById('f-nome').value.trim();
   const email = document.getElementById('f-email').value.trim();
   if (!nome || !email) { toast('Nome e e-mail são obrigatórios.','err'); return; }
@@ -553,17 +564,11 @@ async function saveSubscriber() {
   };
 
   showLoading(true);
-  let error;
-  if (editingId) {
-    ({ error } = await sb.from('subscribers').update(payload).eq('id', editingId));
-  } else {
-    payload.ultimo_acesso = today();
-    ({ error } = await sb.from('subscribers').insert(payload));
-  }
+  const { error } = await sb.from('subscribers').update(payload).eq('id', editingId);
   showLoading(false);
 
   if (error) { toast('Erro: ' + error.message, 'err'); return; }
-  toast(editingId ? 'Assinante atualizado ✓' : 'Assinante cadastrado ✓');
+  toast('Assinante atualizado ✓');
   closeModal();
   await loadAll();
 }
@@ -619,9 +624,6 @@ function exportCSV() {
 // Close on bg click
 document.getElementById('modal-form').addEventListener('click', e => { if(e.target===e.currentTarget) closeModal(); });
 document.getElementById('modal-view').addEventListener('click', e => { if(e.target===e.currentTarget) closeView(); });
-
-// Auto-init if already logged
-if (sessionStorage.getItem('admin_logged')) loadAll();
 </script>
 </body>
 </html>

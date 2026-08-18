@@ -1,18 +1,29 @@
 -- ============================================================
--- BÚSSOLA FINANCEIRA — Supabase Schema
+-- MEUARGUS — Supabase Schema v2 (com Auth + isolamento por assinante)
 -- Cole este SQL no Supabase: SQL Editor → New Query → Run
+--
+-- Mudanças vs. v1:
+--  - subscribers.id agora É o auth.users.id (perfil 1:1 com login)
+--  - lancamentos ganha subscriber_id (cada assinante só vê os próprios)
+--  - subscribers.is_admin marca quem pode acessar o admin.html
+--  - trigger cria a linha em subscribers automaticamente no signup
+--  - RLS de verdade: sem "using (true)" liberado pra qualquer um
 -- ============================================================
 
+-- ── 0. LIMPA SCHEMA ANTIGO (se existir) ──────────────────────
+drop table if exists public.lancamentos cascade;
+drop table if exists public.subscribers cascade;
 
--- ── 1. TABELA DE ASSINANTES ──────────────────────────────
-create table if not exists public.subscribers (
-  id          uuid primary key default gen_random_uuid(),
+-- ── 1. TABELA DE ASSINANTES (perfil ligado ao auth.users) ────
+create table public.subscribers (
+  id          uuid primary key references auth.users(id) on delete cascade,
   nome        text not null,
   email       text not null unique,
   tel         text,
   empresa     text,
   plano       text not null default 'free' check (plano in ('free','pro','premium')),
-  status      text not null default 'ativo' check (status in ('ativo','trial','inativo','expirado')),
+  status      text not null default 'trial' check (status in ('ativo','trial','inativo','expirado')),
+  is_admin    boolean not null default false,
   cadastro    date default current_date,
   expira      date,
   ultimo_acesso date default current_date,
@@ -20,50 +31,97 @@ create table if not exists public.subscribers (
   created_at  timestamptz default now()
 );
 
--- ── 2. TABELA DE LANÇAMENTOS (Fluxo de Caixa) ────────────
-create table if not exists public.lancamentos (
-  id          uuid primary key default gen_random_uuid(),
-  tipo        text not null check (tipo in ('receber','pagar')),
-  descricao   text not null,
-  valor       numeric(12,2) not null,
-  vencimento  date,
-  categoria   text,
-  status      text not null default 'pendente' check (status in ('pendente','pago')),
-  recorrencia text default 'none',
-  toc         text default 'do',
-  created_at  timestamptz default now()
+-- ── 2. TABELA DE LANÇAMENTOS (Fluxo de Caixa, por assinante) ─
+create table public.lancamentos (
+  id            uuid primary key default gen_random_uuid(),
+  subscriber_id uuid not null references public.subscribers(id) on delete cascade,
+  tipo          text not null check (tipo in ('receber','pagar')),
+  descricao     text not null,
+  valor         numeric(12,2) not null,
+  vencimento    date,
+  categoria     text,
+  status        text not null default 'pendente' check (status in ('pendente','pago')),
+  recorrencia   text default 'none',
+  toc           text default 'do',
+  created_at    timestamptz default now()
 );
 
--- ── 3. ROW LEVEL SECURITY ────────────────────────────────
--- Habilita RLS (segurança por linha)
+-- ── 3. AUTO-CRIA O PERFIL EM subscribers NO SIGNUP ───────────
+create or replace function public.handle_new_user()
+returns trigger
+language plpgsql
+security definer set search_path = public
+as $$
+begin
+  insert into public.subscribers (id, nome, email, plano, status)
+  values (
+    new.id,
+    coalesce(new.raw_user_meta_data->>'nome', split_part(new.email, '@', 1)),
+    new.email,
+    'free',
+    'trial'
+  );
+  return new;
+end;
+$$;
+
+drop trigger if exists on_auth_user_created on auth.users;
+create trigger on_auth_user_created
+  after insert on auth.users
+  for each row execute function public.handle_new_user();
+
+-- ── 4. HELPER: is_admin() sem recursão de RLS ────────────────
+create or replace function public.is_admin()
+returns boolean
+language sql
+security definer set search_path = public
+stable
+as $$
+  select coalesce((select is_admin from public.subscribers where id = auth.uid()), false);
+$$;
+
+-- ── 5. ROW LEVEL SECURITY ─────────────────────────────────────
 alter table public.subscribers enable row level security;
 alter table public.lancamentos  enable row level security;
 
--- Política: permite acesso apenas com a anon key (acesso público autenticado via chave)
--- Para um app simples sem auth de usuários, usamos acesso irrestrito pela anon key.
--- A segurança real vem de manter a service_role key privada.
+-- subscribers: cada um vê/edita só o próprio perfil; admin vê/edita todos
+create policy "subscriber_select_own_or_admin" on public.subscribers
+  for select using (auth.uid() = id or public.is_admin());
 
-create policy "anon_all_subscribers" on public.subscribers
-  for all using (true) with check (true);
+create policy "subscriber_update_own_or_admin" on public.subscribers
+  for update using (auth.uid() = id or public.is_admin());
 
-create policy "anon_all_lancamentos" on public.lancamentos
-  for all using (true) with check (true);
+create policy "subscriber_delete_admin_only" on public.subscribers
+  for delete using (public.is_admin());
 
--- ── 4. ÍNDICES para performance ──────────────────────────
-create index if not exists idx_subscribers_status on public.subscribers(status);
-create index if not exists idx_subscribers_plano  on public.subscribers(plano);
-create index if not exists idx_lancamentos_tipo   on public.lancamentos(tipo);
-create index if not exists idx_lancamentos_status on public.lancamentos(status);
-create index if not exists idx_lancamentos_venc   on public.lancamentos(vencimento);
+-- lancamentos: cada assinante só acessa os próprios lançamentos
+create policy "lancamentos_select_own" on public.lancamentos
+  for select using (auth.uid() = subscriber_id);
 
--- ── 5. DADOS DE DEMONSTRAÇÃO (opcional) ─────────────────
--- Remova este bloco se não quiser dados de exemplo.
-insert into public.subscribers (nome, email, tel, empresa, plano, status, cadastro, expira, ultimo_acesso, obs)
-values
-  ('Ana Carolina Mendes',  'ana@acmfinancas.com.br',    '(11) 98765-4321', 'ACM Finanças',          'premium', 'ativo',    '2026-01-15', '2027-01-15', '2026-05-30', 'Cliente VIP, migrou do plano Pro.'),
-  ('Roberto Figueiredo',   'rfigueiredo@construtora.com','(21) 99876-5432', 'Construtora Figueiredo','pro',     'ativo',    '2026-02-03', '2027-02-03', '2026-05-28', ''),
-  ('Mariana Souza',        'mariana@mssolucoes.com',     '(31) 98888-7777', 'MS Soluções',           'pro',     'trial',    '2026-05-20', '2026-06-20', '2026-06-01', 'Em período de avaliação de 30 dias.'),
-  ('Carlos Eduardo Lima',  'carlos@limaconsult.com',     '',                'Lima Consultoria',      'free',    'ativo',    '2025-11-10', null,         '2026-04-15', ''),
-  ('Fernanda Torres',      'fernanda@torresinvest.com',  '(11) 97654-3210', 'Torres Investimentos',  'premium', 'expirado', '2025-06-01', '2026-05-31', '2026-05-15', 'Plano venceu, aguardando renovação.'),
-  ('Paulo Henrique Ramos', 'paulo@phremp.com',           '(41) 99123-4567', 'PH Empreendimentos',    'pro',     'inativo',  '2025-08-22', '2026-08-22', '2026-01-10', 'Cancelou por motivos internos.')
-on conflict (email) do nothing;
+create policy "lancamentos_insert_own" on public.lancamentos
+  for insert with check (auth.uid() = subscriber_id);
+
+create policy "lancamentos_update_own" on public.lancamentos
+  for update using (auth.uid() = subscriber_id);
+
+create policy "lancamentos_delete_own" on public.lancamentos
+  for delete using (auth.uid() = subscriber_id);
+
+-- ── 6. ÍNDICES ─────────────────────────────────────────────────
+create index idx_subscribers_status     on public.subscribers(status);
+create index idx_subscribers_plano      on public.subscribers(plano);
+create index idx_lancamentos_subscriber on public.lancamentos(subscriber_id);
+create index idx_lancamentos_tipo       on public.lancamentos(tipo);
+create index idx_lancamentos_status     on public.lancamentos(status);
+create index idx_lancamentos_venc       on public.lancamentos(vencimento);
+
+-- ============================================================
+-- PÓS-INSTALAÇÃO (fazer manualmente, uma vez):
+--
+-- 1. Crie sua própria conta em https://meuargus.com/app (botão de cadastro).
+-- 2. Rode o comando abaixo trocando o e-mail pelo que você cadastrou,
+--    para virar admin e poder acessar /admin:
+--
+--    update public.subscribers set is_admin = true where email = 'SEU_EMAIL_AQUI';
+--
+-- ============================================================

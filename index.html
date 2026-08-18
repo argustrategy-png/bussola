@@ -184,16 +184,63 @@
     nav { padding: 16px 12px 0; }
     .tab { margin: 0 12px 24px; padding: 16px; }
   }
+
+  /* Auth screen */
+  #auth-screen { min-height: 100vh; display: none; align-items: center; justify-content: center;
+    background: radial-gradient(ellipse at 30% 40%, rgba(37,99,235,.08) 0%, transparent 60%), var(--navy); padding: 20px; }
+  .auth-box { background: var(--surface); border: 1px solid var(--gold-dark); border-radius: 16px;
+    padding: 44px 36px; width: 100%; max-width: 380px; text-align: center; }
+  .auth-box .logo { font-size: 2.4rem; margin-bottom: 10px; }
+  .auth-box h1 { font-family: 'Playfair Display', serif; font-size: 1.35rem; color: var(--gold); margin-bottom: 4px; }
+  .auth-box p { font-size: .8rem; color: var(--text2); margin-bottom: 26px; }
+  .auth-field { display: flex; flex-direction: column; gap: 6px; margin-bottom: 14px; text-align: left; }
+  .auth-field label { font-size: .72rem; color: var(--text2); text-transform: uppercase; letter-spacing: .06em; }
+  .auth-field input { padding: 10px 13px; border: 1px solid var(--navy-border); border-radius: 8px;
+    background: var(--surface2); color: var(--text); font-size: .92rem; font-family: 'Inter', sans-serif; }
+  .auth-field input:focus { outline: none; border-color: var(--gold-dark); }
+  .auth-error { font-size: .82rem; margin-top: 12px; display: none; color: var(--red); }
+  .auth-switch { margin-top: 18px; font-size: .82rem; color: var(--text2); }
+  .auth-switch a { color: var(--gold); text-decoration: none; cursor: pointer; }
+  .btn-logout { background: none; border: 1px solid var(--navy-border); color: var(--text2); padding: 6px 14px;
+    border-radius: 7px; cursor: pointer; font-size: .78rem; font-family: 'Inter', sans-serif; }
+  .btn-logout:hover { border-color: var(--red); color: var(--red); }
 </style>
 </head>
 <body>
 
+<!-- AUTH -->
+<div id="auth-screen">
+  <div class="auth-box">
+    <div class="logo">🧭</div>
+    <h1>MeuArgus</h1>
+    <p id="auth-mode-label">Entrar na sua conta</p>
+    <div class="auth-field" id="auth-nome-field" style="display:none">
+      <label>Nome</label>
+      <input id="auth-nome" type="text" placeholder="Seu nome">
+    </div>
+    <div class="auth-field">
+      <label>E-mail</label>
+      <input id="auth-email" type="email" placeholder="voce@empresa.com" autocomplete="username">
+    </div>
+    <div class="auth-field">
+      <label>Senha</label>
+      <input id="auth-pass" type="password" placeholder="••••••••" autocomplete="current-password" onkeydown="if(event.key==='Enter')doAuthSubmit()">
+    </div>
+    <button class="btn btn-primary" style="width:100%" onclick="doAuthSubmit()" id="auth-submit-btn">Entrar</button>
+    <div class="auth-error" id="auth-error"></div>
+    <div class="auth-switch"><span id="auth-toggle-label">Não tem conta?</span> <a onclick="toggleAuthMode()" id="auth-toggle-link">Cadastre-se</a></div>
+  </div>
+</div>
+
+<!-- APP -->
+<div id="app-content" style="display:none">
 <header>
   <div class="logo-mark">🧭</div>
   <div>
     <h1>MeuArgus</h1>
     <span id="hd-subtitle"></span>
   </div>
+  <div style="margin-left:auto"><button class="btn-logout" onclick="doLogout()">Sair</button></div>
 </header>
 
 <nav>
@@ -381,13 +428,14 @@
     <button class="btn btn-secondary" onclick="downloadTemplate()">⬇ Baixar modelo CSV</button>
   </div>
 </div>
+</div><!-- /#app-content -->
 
 <script>
 // ══════════════════════════════════════════════
 // ⚙️  CONFIGURAÇÃO SUPABASE — cole suas credenciais
 // ══════════════════════════════════════════════
-const SUPABASE_URL = 'COLE_SUA_URL_AQUI';
-const SUPABASE_KEY = 'COLE_SUA_ANON_KEY_AQUI';
+const SUPABASE_URL = 'https://ijbzdhpfhusckvoecdjw.supabase.co';
+const SUPABASE_KEY = 'sb_publishable_hJhexGzbi1soGSnlXwgQMA_wkQG9_yk';
 // ══════════════════════════════════════════════
 
 const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
@@ -398,6 +446,64 @@ let bussolaState = JSON.parse(localStorage.getItem('fc_bussola') || '{"investime
 let chartFluxo, chartPrevisao;
 let pendingImport = [];
 let _saving = false;
+let currentUser = null;
+let authMode = 'login';
+
+// ── AUTH ──────────────────────────────────────────────────
+function toggleAuthMode() {
+  authMode = authMode === 'login' ? 'signup' : 'login';
+  document.getElementById('auth-nome-field').style.display = authMode === 'signup' ? 'block' : 'none';
+  document.getElementById('auth-submit-btn').textContent = authMode === 'signup' ? 'Criar conta' : 'Entrar';
+  document.getElementById('auth-mode-label').textContent = authMode === 'signup' ? 'Criar sua conta' : 'Entrar na sua conta';
+  document.getElementById('auth-toggle-label').textContent = authMode === 'signup' ? 'Já tem conta?' : 'Não tem conta?';
+  document.getElementById('auth-toggle-link').textContent = authMode === 'signup' ? 'Entrar' : 'Cadastre-se';
+  const err = document.getElementById('auth-error');
+  err.style.display = 'none'; err.style.color = 'var(--red)';
+}
+
+async function doAuthSubmit() {
+  const email = document.getElementById('auth-email').value.trim();
+  const pass = document.getElementById('auth-pass').value;
+  const err = document.getElementById('auth-error');
+  err.style.display = 'none'; err.style.color = 'var(--red)';
+  if (!email || !pass) { err.textContent = 'Preencha e-mail e senha.'; err.style.display = 'block'; return; }
+
+  if (authMode === 'signup') {
+    const nome = document.getElementById('auth-nome').value.trim();
+    if (!nome) { err.textContent = 'Informe seu nome.'; err.style.display = 'block'; return; }
+    if (pass.length < 8) { err.textContent = 'A senha deve ter pelo menos 8 caracteres.'; err.style.display = 'block'; return; }
+    const { data: sd, error } = await sb.auth.signUp({ email, password: pass, options: { data: { nome } } });
+    if (error) { err.textContent = error.message; err.style.display = 'block'; return; }
+    if (!sd.session) {
+      err.textContent = 'Conta criada! Verifique seu e-mail para confirmar o cadastro antes de entrar.';
+      err.style.color = 'var(--green)'; err.style.display = 'block';
+      return;
+    }
+    onAuthed(sd.user);
+  } else {
+    const { data: sd, error } = await sb.auth.signInWithPassword({ email, password: pass });
+    if (error) { err.textContent = 'E-mail ou senha incorretos.'; err.style.display = 'block'; return; }
+    onAuthed(sd.user);
+  }
+}
+
+function onAuthed(user) {
+  currentUser = user;
+  document.getElementById('auth-screen').style.display = 'none';
+  document.getElementById('app-content').style.display = 'block';
+  loadData();
+}
+
+async function doLogout() {
+  await sb.auth.signOut();
+  location.reload();
+}
+
+async function initAuth() {
+  const { data: { session } } = await sb.auth.getSession();
+  if (session) onAuthed(session.user);
+  else document.getElementById('auth-screen').style.display = 'flex';
+}
 
 // ── Sync indicator ──────────────────────────────────────
 function showSync(msg, err) {
@@ -432,6 +538,7 @@ async function save() {
 
 async function _insert(item) {
   const { id: _ignore, ...payload } = item;
+  payload.subscriber_id = currentUser.id;
   const { data: rows, error } = await sb.from('lancamentos').insert(payload).select();
   if (error) { showSync('Erro ao salvar ✗', true); return null; }
   showSync('Salvo ✓');
@@ -663,7 +770,7 @@ async function addLancamento() {
   if (!desc) { alert('Informe a descrição.'); return; }
   if (!valor || valor <= 0) { alert('Informe um valor válido.'); return; }
   if (!venc) { alert('Informe o vencimento.'); return; }
-  const base = { tipo, descricao: desc, valor, vencimento: venc, categoria: cat || null, status: 'pendente', recorrencia: rec, toc };
+  const base = { tipo, descricao: desc, valor, vencimento: venc, categoria: cat || null, status: 'pendente', recorrencia: rec, toc, subscriber_id: currentUser.id };
   const items = [{ ...base }];
   if (rec !== 'none') {
     const steps = { semanal:7, quinzenal:15, mensal:30 };
@@ -802,7 +909,7 @@ function parseCSV(text) {
   ).join('') + (pendingImport.length>20?`<tr><td colspan="5" class="empty">...e mais ${pendingImport.length-20} registros</td></tr>`:'');
 }
 async function confirmImport() {
-  const toInsert = pendingImport.map(({ id: _ignore, ...rest }) => rest);
+  const toInsert = pendingImport.map(({ id: _ignore, ...rest }) => ({ ...rest, subscriber_id: currentUser.id }));
   const { data: rows, error } = await sb.from('lancamentos').insert(toInsert).select();
   if (error) { showSync('Erro ao importar ✗', true); return; }
   data.push(...(rows||[]));
@@ -819,7 +926,7 @@ function downloadTemplate() {
 // ─── INIT ────────────────────────────────────────────────
 document.getElementById('f-venc').value = today();
 toggleTocClass();
-loadData(); // carrega do Supabase na inicialização
+initAuth(); // verifica sessão e carrega do Supabase se autenticado
 
 function refreshAll() {
   renderDashboard();
