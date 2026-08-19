@@ -46,7 +46,7 @@ create table public.lancamentos (
   origem        text not null default 'manual' check (origem in ('manual','importado','erp')),
   contraparte   text,
   contraparte_telefone text,
-  bling_id      text unique,
+  erp_id        text unique, -- id do lançamento no ERP de origem, ex: "bling:123" (dedupe de sincronização)
   created_at    timestamptz default now()
 );
 
@@ -112,22 +112,25 @@ create policy "lancamentos_delete_own" on public.lancamentos
   for delete using (auth.uid() = subscriber_id);
 
 -- ── 5b. INTEGRAÇÕES COM ERP (tokens — só o backend acessa) ─────
+-- provider: 'bling' funciona hoje; 'contaazul'/'quickbooks'/'omie' são
+-- adaptadores de referência em api/_lib/providers/, aguardando credenciais
+-- (ver comentários em cada arquivo).
 create table if not exists public.integracoes_erp (
   id             uuid primary key default gen_random_uuid(),
   subscriber_id  uuid not null references public.subscribers(id) on delete cascade,
-  provider       text not null default 'bling' check (provider in ('bling')),
-  access_token   text not null,
-  refresh_token  text not null,
+  provider       text not null check (provider in ('bling','contaazul','quickbooks','omie')),
+  access_token   text not null, -- para providers 'apikey' (Omie), guarda a App Key
+  refresh_token  text not null, -- para providers 'apikey' (Omie), guarda o App Secret
   expires_at     timestamptz not null,
   ultima_sincronizacao timestamptz,
-  bling_cnpj     text,
+  erp_account_id text, -- identificador da conta no ERP (CNPJ no Bling, realmId no QuickBooks...)
   created_at     timestamptz default now(),
   updated_at     timestamptz default now(),
   unique (subscriber_id, provider)
 );
 
--- Trava obrigatória: o mesmo CNPJ do Bling não pode estar ligado a duas contas MeuArgus.
-create unique index if not exists integracoes_erp_bling_cnpj_key on public.integracoes_erp(bling_cnpj) where bling_cnpj is not null;
+-- Trava obrigatória: a mesma conta de ERP não pode estar ligada a duas contas MeuArgus.
+create unique index if not exists integracoes_erp_account_id_key on public.integracoes_erp(provider, erp_account_id) where erp_account_id is not null;
 
 alter table public.integracoes_erp enable row level security;
 -- Nenhuma policy para anon/authenticated: só o service_role (usado pelo backend) acessa esta tabela.

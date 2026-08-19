@@ -166,6 +166,20 @@
 
   .divider { height: 1px; background: var(--border); margin: 20px 0; }
 
+  .modal-bg { display: none; position: fixed; inset: 0; background: rgba(0,0,0,.5); z-index: 100; align-items: center; justify-content: center; padding: 20px; }
+  .modal-bg.open { display: flex; }
+  .modal { background: var(--surface); border: 1px solid var(--border); border-radius: 14px; width: 100%; max-width: 420px; box-shadow: var(--shadow); }
+  .modal-header { padding: 20px 22px 16px; border-bottom: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center; }
+  .modal-header h2 { font-family: 'Playfair Display', serif; font-size: 1.05rem; color: var(--accent); }
+  .modal-close { background: none; border: none; color: var(--text2); font-size: 1.2rem; cursor: pointer; }
+  .modal-close:hover { color: var(--red); }
+  .modal-body { padding: 20px 22px; }
+  .modal-footer { padding: 14px 22px; border-top: 1px solid var(--border); display: flex; gap: 10px; justify-content: flex-end; }
+  .form-field { display: flex; flex-direction: column; gap: 6px; margin-bottom: 14px; }
+  .form-field label { font-size: .72rem; color: var(--text2); text-transform: uppercase; letter-spacing: .06em; }
+  .form-field input { padding: 9px 12px; border: 1px solid var(--border); border-radius: 7px; background: var(--surface2); color: var(--text); font-size: .9rem; font-family: 'Inter', sans-serif; }
+  .form-field input:focus { outline: none; border-color: var(--accent); }
+
   ::-webkit-scrollbar { width: 6px; height: 6px; }
   ::-webkit-scrollbar-track { background: var(--bg); }
   ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
@@ -478,18 +492,23 @@
 <!-- IMPORTAR -->
 <div class="tab" id="tab-importar">
   <div class="section-title">Integração com ERP</div>
-  <div class="erp-note" id="bling-status-desconectado">
-    🔌 <div>
-      <strong>Conecte sua conta do Bling</strong> para sincronizar automaticamente contas a pagar e a receber — sem digitar nada à mão.
-      <div style="margin-top:10px"><button class="btn btn-primary" onclick="conectarBling()">Conectar com Bling</button></div>
-    </div>
-  </div>
-  <div class="erp-note" id="bling-status-conectado" style="display:none">
-    🔌 <div>
-      <strong>Bling conectado.</strong> <span id="bling-ultima-sync"></span>
-      <div style="margin-top:10px;display:flex;gap:10px">
-        <button class="btn btn-primary" onclick="sincronizarBling()" id="btn-sync-bling">Sincronizar agora</button>
-        <button class="btn btn-secondary" onclick="desconectarBling()">Desconectar</button>
+  <div id="erp-lista"></div>
+
+  <!-- Modal de conexão por App Key/Secret (Omie e futuros ERPs sem OAuth2) -->
+  <div class="modal-bg" id="modal-apikey">
+    <div class="modal">
+      <div class="modal-header">
+        <h2 id="apikey-titulo">Conectar</h2>
+        <button class="modal-close" onclick="closeApiKeyModal()">✕</button>
+      </div>
+      <div class="modal-body">
+        <div class="form-field"><label>App Key</label><input id="apikey-key" type="text"></div>
+        <div class="form-field"><label>App Secret</label><input id="apikey-secret" type="password"></div>
+        <div id="apikey-error" style="display:none;color:var(--red);font-size:.85rem"></div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" onclick="closeApiKeyModal()">Cancelar</button>
+        <button class="btn btn-primary" onclick="confirmarApiKey()">Conectar</button>
       </div>
     </div>
   </div>
@@ -683,8 +702,8 @@ function onAuthed(user) {
   document.getElementById('auth-screen').style.display = 'none';
   document.getElementById('app-content').style.display = 'block';
   loadData();
-  handleBlingRedirectParams();
-  checkBlingStatus();
+  handleErpRedirectParams();
+  checkErpStatus();
 }
 
 async function doLogout() {
@@ -1281,69 +1300,135 @@ function downloadTemplate() {
   const a=document.createElement('a'); a.href='data:text/csv;charset=utf-8,'+encodeURIComponent(csv); a.download='modelo-meuargus.csv'; a.click();
 }
 
-// ─── INTEGRAÇÃO BLING ────────────────────────────────────
-const BLING_CLIENT_ID = '2e668bfee063e06f76a1b648a71b94339b3f6b92';
-const BLING_AUTHORIZE_URL = 'https://www.bling.com.br/Api/v3/oauth/authorize';
+// ─── INTEGRAÇÃO COM ERPs (biblioteca multi-provedor) ─────
+// Bling já está pré-configurado. ContaAzul/QuickBooks aguardam Client ID
+// (falta cadastrar o app em cada plataforma). Omie não usa OAuth2 — conecta
+// direto com App Key/Secret.
+const ERP_PROVIDERS = {
+  bling:      { label: 'Bling',      authType: 'oauth2', clientId: '2e668bfee063e06f76a1b648a71b94339b3f6b92', authorizeUrl: 'https://www.bling.com.br/Api/v3/oauth/authorize' },
+  contaazul:  { label: 'Conta Azul', authType: 'oauth2', clientId: null, authorizeUrl: 'https://api.contaazul.com/auth/authorize' },
+  quickbooks: { label: 'QuickBooks', authType: 'oauth2', clientId: null, authorizeUrl: 'https://appcenter.intuit.com/connect/oauth2' },
+  omie:       { label: 'Omie',       authType: 'apikey' },
+};
+let erpStatusAtual = {};
+let apikeyProviderAtual = null;
 
-function conectarBling() {
-  const redirectUri = `${location.origin}/api/bling/callback`;
-  const url = `${BLING_AUTHORIZE_URL}?response_type=code&client_id=${encodeURIComponent(BLING_CLIENT_ID)}&state=${encodeURIComponent(currentUser.id)}&redirect_uri=${encodeURIComponent(redirectUri)}`;
+async function erpAuthHeader() {
+  const { data: { session } } = await sb.auth.getSession();
+  return { Authorization: `Bearer ${session.access_token}`, 'Content-Type': 'application/json' };
+}
+
+function conectarERP(provider) {
+  const cfg = ERP_PROVIDERS[provider];
+  if (cfg.authType === 'apikey') { openApiKeyModal(provider); return; }
+  if (!cfg.clientId) { showSync(`${cfg.label} ainda não está configurado nesta conta (falta cadastrar o app e o Client ID).`, true); return; }
+  const redirectUri = `${location.origin}/api/${provider}/callback`;
+  const url = `${cfg.authorizeUrl}?response_type=code&client_id=${encodeURIComponent(cfg.clientId)}&state=${encodeURIComponent(currentUser.id)}&redirect_uri=${encodeURIComponent(redirectUri)}`;
   location.href = url;
 }
 
-async function blingAuthHeader() {
-  const { data: { session } } = await sb.auth.getSession();
-  return { Authorization: `Bearer ${session.access_token}` };
-}
-
-async function checkBlingStatus() {
+async function checkErpStatus() {
   try {
-    const resp = await fetch('/api/bling/status', { headers: await blingAuthHeader() });
+    const resp = await fetch('/api/erp/status', { headers: await erpAuthHeader() });
     if (!resp.ok) return;
     const data = await resp.json();
-    document.getElementById('bling-status-desconectado').style.display = data.conectado ? 'none' : 'flex';
-    document.getElementById('bling-status-conectado').style.display = data.conectado ? 'flex' : 'none';
-    if (data.conectado) {
-      document.getElementById('bling-ultima-sync').textContent = data.ultima_sincronizacao
-        ? `Última sincronização: ${new Date(data.ultima_sincronizacao).toLocaleString('pt-BR')}`
-        : 'Ainda não sincronizado — clique em "Sincronizar agora".';
-    }
+    erpStatusAtual = {};
+    (data.integracoes || []).forEach(i => { erpStatusAtual[i.provider] = i; });
+    renderErpLista();
   } catch (e) { /* silencioso: integração é opcional */ }
 }
 
-async function sincronizarBling() {
-  const btn = document.getElementById('btn-sync-bling');
-  btn.disabled = true; btn.textContent = 'Sincronizando…';
+function renderErpLista() {
+  const box = document.getElementById('erp-lista');
+  box.innerHTML = Object.entries(ERP_PROVIDERS).map(([key, cfg]) => {
+    const conectado = erpStatusAtual[key];
+    if (conectado) {
+      const syncTxt = conectado.ultima_sincronizacao
+        ? `Última sincronização: ${new Date(conectado.ultima_sincronizacao).toLocaleString('pt-BR')}`
+        : 'Ainda não sincronizado — clique em "Sincronizar agora".';
+      return `<div class="erp-note">🔌 <div>
+        <strong>${cfg.label} conectado.</strong> ${syncTxt}
+        <div style="margin-top:10px;display:flex;gap:10px">
+          <button class="btn btn-primary" onclick="sincronizarERP('${key}')">Sincronizar agora</button>
+          <button class="btn btn-secondary" onclick="desconectarERP('${key}')">Desconectar</button>
+        </div>
+      </div></div>`;
+    }
+    return `<div class="erp-note">🔌 <div>
+      <strong>Conectar ${cfg.label}</strong>
+      <div style="margin-top:10px"><button class="btn btn-primary" onclick="conectarERP('${key}')">Conectar com ${cfg.label}</button></div>
+    </div></div>`;
+  }).join('');
+}
+
+async function sincronizarERP(provider) {
+  showSync(`Sincronizando ${ERP_PROVIDERS[provider].label}…`);
   try {
-    const resp = await fetch('/api/bling/sync', { method: 'POST', headers: await blingAuthHeader() });
+    const resp = await fetch('/api/erp/sync', { method: 'POST', headers: await erpAuthHeader(), body: JSON.stringify({ provider }) });
     const data = await resp.json();
     if (!resp.ok) { showSync('Erro ao sincronizar: ' + (data.error || ''), true); }
-    else { showSync(`${data.sincronizados} lançamento(s) sincronizado(s) ✓`); await loadData(); await checkBlingStatus(); }
+    else { showSync(`${data.sincronizados} lançamento(s) sincronizado(s) ✓`); await loadData(); await checkErpStatus(); }
   } catch (e) { showSync('Erro ao sincronizar ✗', true); }
-  btn.disabled = false; btn.textContent = 'Sincronizar agora';
 }
 
-async function desconectarBling() {
-  if (!confirm('Desconectar o Bling? Os lançamentos já sincronizados continuam salvos.')) return;
-  await fetch('/api/bling/disconnect', { method: 'POST', headers: await blingAuthHeader() });
-  await checkBlingStatus();
+async function desconectarERP(provider) {
+  if (!confirm(`Desconectar ${ERP_PROVIDERS[provider].label}? Os lançamentos já sincronizados continuam salvos.`)) return;
+  await fetch('/api/erp/disconnect', { method: 'POST', headers: await erpAuthHeader(), body: JSON.stringify({ provider }) });
+  await checkErpStatus();
 }
 
-const BLING_ERROS = {
-  cnpj_ja_conectado: 'Essa conta Bling já está conectada a outra conta MeuArgus. Cada empresa no Bling só pode estar ligada a uma única conta.',
-  token_exchange_failed: 'Não foi possível concluir a autorização com o Bling. Tente conectar novamente.',
+function openApiKeyModal(provider) {
+  apikeyProviderAtual = provider;
+  document.getElementById('apikey-titulo').textContent = 'Conectar ' + ERP_PROVIDERS[provider].label;
+  document.getElementById('apikey-key').value = '';
+  document.getElementById('apikey-secret').value = '';
+  document.getElementById('apikey-error').style.display = 'none';
+  document.getElementById('modal-apikey').classList.add('open');
+}
+function closeApiKeyModal() { document.getElementById('modal-apikey').classList.remove('open'); }
+
+async function confirmarApiKey() {
+  const appKey = document.getElementById('apikey-key').value.trim();
+  const appSecret = document.getElementById('apikey-secret').value.trim();
+  const err = document.getElementById('apikey-error');
+  err.style.display = 'none';
+  if (!appKey || !appSecret) { err.textContent = 'Preencha os dois campos.'; err.style.display = 'block'; return; }
+  const resp = await fetch('/api/erp/connect-apikey', {
+    method: 'POST', headers: await erpAuthHeader(),
+    body: JSON.stringify({ provider: apikeyProviderAtual, appKey, appSecret }),
+  });
+  const data = await resp.json();
+  if (!resp.ok) {
+    err.textContent = data.error === 'ja_conectado_em_outra_conta'
+      ? 'Essa conta já está conectada em outra conta MeuArgus.'
+      : 'Não foi possível conectar — confira a App Key e o App Secret.';
+    err.style.display = 'block';
+    return;
+  }
+  closeApiKeyModal();
+  showSync(`${ERP_PROVIDERS[apikeyProviderAtual].label} conectado ✓`);
+  await checkErpStatus();
+}
+
+document.getElementById('modal-apikey').addEventListener('click', e => { if (e.target === e.currentTarget) closeApiKeyModal(); });
+
+const ERP_ERROS = {
+  ja_conectado: 'Essa conta já está conectada a outra conta MeuArgus. Cada empresa só pode estar ligada a uma única conta.',
+  token_exchange_failed: 'Não foi possível concluir a autorização. Tente conectar novamente.',
   save_failed: 'Erro ao salvar a conexão. Tente novamente em instantes.',
-  cnpj_nao_verificado: 'Não foi possível confirmar a empresa da sua conta Bling. Por segurança, a conexão foi cancelada. Tente novamente.',
+  conta_nao_verificada: 'Não foi possível confirmar sua empresa. Por segurança, a conexão foi cancelada. Tente novamente.',
 };
 
-function handleBlingRedirectParams() {
+function handleErpRedirectParams() {
   const params = new URLSearchParams(location.search);
-  if (params.get('bling_conectado')) { showSync('Bling conectado ✓'); checkBlingStatus(); }
-  if (params.get('bling_erro')) {
-    const codigo = params.get('bling_erro');
-    showSync(BLING_ERROS[codigo] || ('Erro ao conectar Bling: ' + codigo), true);
+  const provider = params.get('provider');
+  const label = (provider && ERP_PROVIDERS[provider]) ? ERP_PROVIDERS[provider].label : 'ERP';
+  if (params.get('erp_conectado')) { showSync(`${label} conectado ✓`); checkErpStatus(); }
+  if (params.get('erp_erro')) {
+    const codigo = params.get('erp_erro');
+    showSync(ERP_ERROS[codigo] || (`Erro ao conectar ${label}: ${codigo}`), true);
   }
-  if (params.has('bling_conectado') || params.has('bling_erro')) {
+  if (params.has('erp_conectado') || params.has('erp_erro')) {
     history.replaceState({}, '', location.pathname);
   }
 }
