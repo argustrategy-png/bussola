@@ -191,7 +191,7 @@
   }
 
   /* Auth screen */
-  #auth-screen { min-height: 100vh; display: none; align-items: center; justify-content: center;
+  #auth-screen, #paywall-screen { min-height: 100vh; display: none; align-items: center; justify-content: center;
     background: radial-gradient(ellipse at 30% 40%, var(--accent-light) 0%, transparent 60%), var(--bg); padding: 20px; }
   .auth-box { background: var(--surface); border: 1px solid var(--border); box-shadow: var(--shadow); border-radius: 16px;
     padding: 44px 36px; width: 100%; max-width: 380px; text-align: center; }
@@ -264,6 +264,23 @@
     <div class="auth-error" id="auth-error"></div>
     <div class="auth-switch" id="auth-forgot-row"><a onclick="forgotPassword()">Esqueci minha senha</a></div>
     <div class="auth-switch" id="auth-switch-row"><span id="auth-toggle-label">Não tem conta?</span> <a onclick="toggleAuthMode()" id="auth-toggle-link">Cadastre-se</a></div>
+  </div>
+</div>
+
+<!-- PAYWALL -->
+<div id="paywall-screen" style="display:none">
+  <button class="theme-toggle auth-theme-toggle" onclick="toggleTheme()">🌙</button>
+  <div class="auth-box">
+    <div class="logo">🔒</div>
+    <h1 id="paywall-titulo">Seu período de teste acabou</h1>
+    <p id="paywall-texto">Assine o MeuArgus para continuar usando o painel, os indicadores e as integrações com ERP.</p>
+    <div style="background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:16px;margin-bottom:16px">
+      <div style="font-size:1.3rem;font-weight:700;color:var(--accent)">R$ 199,99<span style="font-size:.8rem;color:var(--text2);font-weight:400">/mês</span></div>
+      <div style="font-size:.78rem;color:var(--text2)">Plano MeuArgus Pro</div>
+    </div>
+    <button class="btn btn-primary" style="width:100%" onclick="assinarAgora()" id="paywall-btn">Assinar agora</button>
+    <div class="auth-error" id="paywall-error"></div>
+    <div class="auth-switch"><a onclick="doLogout()">Sair</a></div>
   </div>
 </div>
 
@@ -719,13 +736,23 @@ function escolherErpAuth(erp) {
   else localStorage.removeItem('meuargus_erp_preferido');
 }
 
-function onAuthed(user) {
+async function onAuthed(user) {
   currentUser = user;
   document.getElementById('auth-screen').style.display = 'none';
+
+  const { data: perfil } = await sb.from('subscribers').select('status,plano,expira,is_admin').eq('id', user.id).single();
+  const trialVencido = perfil?.status === 'trial' && perfil.expira && new Date(perfil.expira + 'T23:59:59') < new Date();
+  if (perfil && !perfil.is_admin && (perfil.status === 'expirado' || trialVencido)) {
+    if (trialVencido) sb.from('subscribers').update({ status: 'expirado' }).eq('id', user.id).then(() => {});
+    showPaywall();
+    return;
+  }
+
   document.getElementById('app-content').style.display = 'block';
   document.getElementById('hd-email').textContent = user.email || '';
   loadData();
   handleErpRedirectParams();
+  handleCheckoutRedirectParams();
   checkErpStatus();
 
   const erpPreferido = localStorage.getItem('meuargus_erp_preferido');
@@ -739,6 +766,38 @@ function onAuthed(user) {
 async function doLogout() {
   await sb.auth.signOut();
   location.reload();
+}
+
+function showPaywall() {
+  document.getElementById('paywall-screen').style.display = 'flex';
+}
+
+async function assinarAgora() {
+  const btn = document.getElementById('paywall-btn');
+  const err = document.getElementById('paywall-error');
+  err.style.display = 'none';
+  btn.disabled = true; btn.textContent = 'Abrindo pagamento…';
+  try {
+    const { data: { session } } = await sb.auth.getSession();
+    const resp = await fetch('/api/stripe/checkout', {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${session.access_token}` },
+    });
+    const data = await resp.json();
+    if (!resp.ok || !data.url) throw new Error(data.error || 'Falha ao iniciar pagamento');
+    location.href = data.url;
+  } catch (e) {
+    err.textContent = 'Não foi possível iniciar o pagamento. Tente novamente em instantes.';
+    err.style.display = 'block';
+    btn.disabled = false; btn.textContent = 'Assinar agora';
+  }
+}
+
+function handleCheckoutRedirectParams() {
+  const params = new URLSearchParams(location.search);
+  if (params.get('checkout') === 'sucesso') showSync('Assinatura confirmada ✓');
+  if (params.get('checkout') === 'cancelado') showSync('Pagamento cancelado.', true);
+  if (params.has('checkout')) history.replaceState({}, '', location.pathname);
 }
 
 async function initAuth() {

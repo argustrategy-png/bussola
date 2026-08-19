@@ -28,6 +28,8 @@ create table public.subscribers (
   expira      date,
   ultimo_acesso date default current_date,
   obs         text,
+  stripe_customer_id     text unique,
+  stripe_subscription_id text unique,
   created_at  timestamptz default now()
 );
 
@@ -57,13 +59,14 @@ language plpgsql
 security definer set search_path = public
 as $$
 begin
-  insert into public.subscribers (id, nome, email, plano, status)
+  insert into public.subscribers (id, nome, email, plano, status, expira)
   values (
     new.id,
     coalesce(new.raw_user_meta_data->>'nome', new.raw_user_meta_data->>'full_name', new.raw_user_meta_data->>'name', split_part(new.email, '@', 1)),
     new.email,
     'free',
-    'trial'
+    'trial',
+    current_date + interval '30 days'
   );
   return new;
 end;
