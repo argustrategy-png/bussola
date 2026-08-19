@@ -261,6 +261,7 @@
     <span id="hd-subtitle"></span>
   </div>
   <div class="header-actions">
+    <span style="font-size:.78rem;color:var(--text2)">Logado como <strong id="hd-email" style="color:var(--text)"></strong></span>
     <button class="theme-toggle" onclick="toggleTheme()" id="theme-toggle-app">🌙</button>
     <button class="btn-logout" onclick="doLogout()">Sair</button>
   </div>
@@ -701,6 +702,7 @@ function onAuthed(user) {
   currentUser = user;
   document.getElementById('auth-screen').style.display = 'none';
   document.getElementById('app-content').style.display = 'block';
+  document.getElementById('hd-email').textContent = user.email || '';
   loadData();
   handleErpRedirectParams();
   checkErpStatus();
