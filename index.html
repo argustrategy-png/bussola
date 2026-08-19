@@ -472,8 +472,24 @@
 
 <!-- IMPORTAR -->
 <div class="tab" id="tab-importar">
-  <div class="section-title">Importar CSV</div>
-  <div class="erp-note">🔌 <div><strong>Pronto para integração com ERP.</strong> Cada lançamento guarda a origem (manual, importado por CSV ou, futuramente, sincronizado direto de um ERP). Quando você conectar um ERP, os lançamentos sincronizados aparecem aqui automaticamente, sem duplicar o que já foi digitado à mão.</div></div>
+  <div class="section-title">Integração com ERP</div>
+  <div class="erp-note" id="bling-status-desconectado">
+    🔌 <div>
+      <strong>Conecte sua conta do Bling</strong> para sincronizar automaticamente contas a pagar e a receber — sem digitar nada à mão.
+      <div style="margin-top:10px"><button class="btn btn-primary" onclick="conectarBling()">Conectar com Bling</button></div>
+    </div>
+  </div>
+  <div class="erp-note" id="bling-status-conectado" style="display:none">
+    🔌 <div>
+      <strong>Bling conectado.</strong> <span id="bling-ultima-sync"></span>
+      <div style="margin-top:10px;display:flex;gap:10px">
+        <button class="btn btn-primary" onclick="sincronizarBling()" id="btn-sync-bling">Sincronizar agora</button>
+        <button class="btn btn-secondary" onclick="desconectarBling()">Desconectar</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="section-title" style="margin-top:28px">Importar CSV</div>
   <p class="import-help">
     Colunas obrigatórias: <code>tipo</code> (pagar/receber) · <code>descricao</code> · <code>valor</code> · <code>vencimento</code> (DD/MM/AAAA)<br>
     Colunas opcionais: <code>categoria</code> · <code>custo</code> (variavel ou fixo) · <code>cliente</code> (para contas a receber, alimenta a Régua de Cobrança)
@@ -621,6 +637,8 @@ function onAuthed(user) {
   document.getElementById('auth-screen').style.display = 'none';
   document.getElementById('app-content').style.display = 'block';
   loadData();
+  handleBlingRedirectParams();
+  checkBlingStatus();
 }
 
 async function doLogout() {
@@ -1211,6 +1229,63 @@ function cancelImport() { document.getElementById('import-result').style.display
 function downloadTemplate() {
   const csv='tipo,descricao,valor,vencimento,categoria,custo,cliente\nreceber,Venda produto A,1500.00,01/07/2026,Vendas,,Cliente Exemplo Ltda\npagar,Aluguel,2000.00,05/07/2026,Infraestrutura,fixo,\npagar,Matéria-prima,800.00,10/07/2026,Produção,variavel,\n';
   const a=document.createElement('a'); a.href='data:text/csv;charset=utf-8,'+encodeURIComponent(csv); a.download='modelo-meuargus.csv'; a.click();
+}
+
+// ─── INTEGRAÇÃO BLING ────────────────────────────────────
+const BLING_CLIENT_ID = '2e668bfee063e06f76a1b648a71b94339b3f6b92';
+const BLING_AUTHORIZE_URL = 'https://www.bling.com.br/Api/v3/oauth/authorize';
+
+function conectarBling() {
+  const redirectUri = `${location.origin}/api/bling/callback`;
+  const url = `${BLING_AUTHORIZE_URL}?response_type=code&client_id=${encodeURIComponent(BLING_CLIENT_ID)}&state=${encodeURIComponent(currentUser.id)}&redirect_uri=${encodeURIComponent(redirectUri)}`;
+  location.href = url;
+}
+
+async function blingAuthHeader() {
+  const { data: { session } } = await sb.auth.getSession();
+  return { Authorization: `Bearer ${session.access_token}` };
+}
+
+async function checkBlingStatus() {
+  try {
+    const resp = await fetch('/api/bling/status', { headers: await blingAuthHeader() });
+    if (!resp.ok) return;
+    const data = await resp.json();
+    document.getElementById('bling-status-desconectado').style.display = data.conectado ? 'none' : 'flex';
+    document.getElementById('bling-status-conectado').style.display = data.conectado ? 'flex' : 'none';
+    if (data.conectado) {
+      document.getElementById('bling-ultima-sync').textContent = data.ultima_sincronizacao
+        ? `Última sincronização: ${new Date(data.ultima_sincronizacao).toLocaleString('pt-BR')}`
+        : 'Ainda não sincronizado — clique em "Sincronizar agora".';
+    }
+  } catch (e) { /* silencioso: integração é opcional */ }
+}
+
+async function sincronizarBling() {
+  const btn = document.getElementById('btn-sync-bling');
+  btn.disabled = true; btn.textContent = 'Sincronizando…';
+  try {
+    const resp = await fetch('/api/bling/sync', { method: 'POST', headers: await blingAuthHeader() });
+    const data = await resp.json();
+    if (!resp.ok) { showSync('Erro ao sincronizar: ' + (data.error || ''), true); }
+    else { showSync(`${data.sincronizados} lançamento(s) sincronizado(s) ✓`); await loadData(); await checkBlingStatus(); }
+  } catch (e) { showSync('Erro ao sincronizar ✗', true); }
+  btn.disabled = false; btn.textContent = 'Sincronizar agora';
+}
+
+async function desconectarBling() {
+  if (!confirm('Desconectar o Bling? Os lançamentos já sincronizados continuam salvos.')) return;
+  await fetch('/api/bling/disconnect', { method: 'POST', headers: await blingAuthHeader() });
+  await checkBlingStatus();
+}
+
+function handleBlingRedirectParams() {
+  const params = new URLSearchParams(location.search);
+  if (params.get('bling_conectado')) { showSync('Bling conectado ✓'); checkBlingStatus(); }
+  if (params.get('bling_erro')) { showSync('Erro ao conectar Bling: ' + params.get('bling_erro'), true); }
+  if (params.has('bling_conectado') || params.has('bling_erro')) {
+    history.replaceState({}, '', location.pathname);
+  }
 }
 
 // ─── INIT ────────────────────────────────────────────────

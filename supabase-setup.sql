@@ -46,6 +46,7 @@ create table public.lancamentos (
   origem        text not null default 'manual' check (origem in ('manual','importado','erp')),
   contraparte   text,
   contraparte_telefone text,
+  bling_id      text unique,
   created_at    timestamptz default now()
 );
 
@@ -109,6 +110,25 @@ create policy "lancamentos_update_own" on public.lancamentos
 
 create policy "lancamentos_delete_own" on public.lancamentos
   for delete using (auth.uid() = subscriber_id);
+
+-- ── 5b. INTEGRAÇÕES COM ERP (tokens — só o backend acessa) ─────
+create table if not exists public.integracoes_erp (
+  id             uuid primary key default gen_random_uuid(),
+  subscriber_id  uuid not null references public.subscribers(id) on delete cascade,
+  provider       text not null default 'bling' check (provider in ('bling')),
+  access_token   text not null,
+  refresh_token  text not null,
+  expires_at     timestamptz not null,
+  ultima_sincronizacao timestamptz,
+  created_at     timestamptz default now(),
+  updated_at     timestamptz default now(),
+  unique (subscriber_id, provider)
+);
+
+alter table public.integracoes_erp enable row level security;
+-- Nenhuma policy para anon/authenticated: só o service_role (usado pelo backend) acessa esta tabela.
+
+create index if not exists idx_integracoes_erp_subscriber on public.integracoes_erp(subscriber_id);
 
 -- ── 6. ÍNDICES ─────────────────────────────────────────────────
 create index idx_subscribers_status     on public.subscribers(status);
