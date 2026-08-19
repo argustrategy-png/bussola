@@ -249,6 +249,7 @@
     <div style="display:flex;align-items:center;gap:12px">
       <span style="font-size:.8rem;color:var(--text2)" id="admin-name"></span>
       <button class="theme-toggle" onclick="toggleTheme()" id="theme-toggle-app">🌙</button>
+      <button class="btn-outline" onclick="openPasswordModal()">Trocar senha</button>
       <button class="btn-logout" onclick="doLogout()">Sair</button>
     </div>
   </header>
@@ -372,6 +373,25 @@
   </div>
 </div>
 
+<!-- ══ MODAL TROCAR SENHA ══ -->
+<div class="modal-bg" id="modal-password">
+  <div class="modal">
+    <div class="modal-header">
+      <h2>Trocar senha</h2>
+      <button class="modal-close" onclick="closePasswordModal()">✕</button>
+    </div>
+    <div class="modal-body">
+      <div class="form-field"><label>Nova senha</label><input id="pw-nova" type="password" placeholder="Mínimo 8 caracteres"></div>
+      <div class="form-field"><label>Confirmar nova senha</label><input id="pw-confirma" type="password" placeholder="Repita a senha"></div>
+      <div id="pw-error" style="display:none;color:var(--red);font-size:.85rem;margin-top:4px"></div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-outline" onclick="closePasswordModal()">Cancelar</button>
+      <button class="btn btn-gold" onclick="salvarNovaSenha()">Salvar</button>
+    </div>
+  </div>
+</div>
+
 <script>
 // ══════════════════════════════════════════════
 // ⚙️  CONFIGURAÇÃO — cole suas credenciais aqui
@@ -444,6 +464,41 @@ async function checkAdminAndEnter(user) {
 }
 
 async function doLogout() { await sb.auth.signOut(); location.reload(); }
+
+// ── TROCAR SENHA ───────────────────────────────
+function openPasswordModal() {
+  document.getElementById('pw-nova').value = '';
+  document.getElementById('pw-confirma').value = '';
+  document.getElementById('pw-error').style.display = 'none';
+  document.getElementById('modal-password').classList.add('open');
+}
+function closePasswordModal() { document.getElementById('modal-password').classList.remove('open'); }
+
+async function salvarNovaSenha() {
+  const nova = document.getElementById('pw-nova').value;
+  const confirma = document.getElementById('pw-confirma').value;
+  const err = document.getElementById('pw-error');
+  err.style.display = 'none';
+  if (nova.length < 8) { err.textContent = 'A senha deve ter pelo menos 8 caracteres.'; err.style.display = 'block'; return; }
+  if (nova !== confirma) { err.textContent = 'As senhas não coincidem.'; err.style.display = 'block'; return; }
+
+  showLoading(true);
+  const { error } = await sb.auth.updateUser({ password: nova });
+  showLoading(false);
+  if (error) { err.textContent = error.message; err.style.display = 'block'; return; }
+  closePasswordModal();
+  toast('Senha atualizada ✓');
+}
+
+document.getElementById('modal-password').addEventListener('click', e => { if(e.target===e.currentTarget) closePasswordModal(); });
+
+// Link de "esqueci minha senha": o Supabase dispara PASSWORD_RECOVERY quando o
+// usuário chega aqui pelo link do e-mail. Abrimos o modal de troca automaticamente.
+sb.auth.onAuthStateChange((event, session) => {
+  if (event === 'PASSWORD_RECOVERY') {
+    checkAdminAndEnter(session.user).then(() => openPasswordModal());
+  }
+});
 
 (async function initAdminAuth() {
   const { data: { session } } = await sb.auth.getSession();

@@ -214,22 +214,27 @@
       <label>Nome</label>
       <input id="auth-nome" type="text" placeholder="Seu nome">
     </div>
-    <button class="btn-google" onclick="loginComGoogle()" type="button">
+    <button class="btn-google" onclick="loginComGoogle()" type="button" id="auth-google-btn">
       <svg width="18" height="18" viewBox="0 0 18 18"><path fill="#4285F4" d="M17.64 9.2c0-.64-.06-1.25-.16-1.84H9v3.48h4.84a4.14 4.14 0 0 1-1.8 2.72v2.26h2.9c1.7-1.57 2.7-3.88 2.7-6.62z"/><path fill="#34A853" d="M9 18c2.43 0 4.47-.8 5.96-2.18l-2.9-2.26c-.8.54-1.83.86-3.06.86-2.35 0-4.34-1.59-5.05-3.72H.96v2.33A9 9 0 0 0 9 18z"/><path fill="#FBBC05" d="M3.95 10.7A5.4 5.4 0 0 1 3.67 9c0-.59.1-1.17.28-1.7V4.97H.96A9 9 0 0 0 0 9c0 1.45.35 2.83.96 4.03l2.99-2.33z"/><path fill="#EA4335" d="M9 3.58c1.32 0 2.51.46 3.44 1.35l2.58-2.58A9 9 0 0 0 .96 4.97l2.99 2.33C4.66 5.17 6.65 3.58 9 3.58z"/></svg>
       Continuar com Google
     </button>
-    <div class="auth-divider"><span>ou</span></div>
-    <div class="auth-field">
+    <div class="auth-divider" id="auth-google-divider"><span>ou</span></div>
+    <div class="auth-field" id="auth-email-field">
       <label>E-mail</label>
       <input id="auth-email" type="email" placeholder="voce@empresa.com" autocomplete="username">
     </div>
-    <div class="auth-field">
-      <label>Senha</label>
+    <div class="auth-field" id="auth-pass-field">
+      <label id="auth-pass-label">Senha</label>
       <input id="auth-pass" type="password" placeholder="••••••••" autocomplete="current-password" onkeydown="if(event.key==='Enter')doAuthSubmit()">
+    </div>
+    <div class="auth-field" id="auth-pass-confirm-field" style="display:none">
+      <label>Confirmar nova senha</label>
+      <input id="auth-pass-confirm" type="password" placeholder="••••••••" onkeydown="if(event.key==='Enter')doAuthSubmit()">
     </div>
     <button class="btn btn-primary" style="width:100%" onclick="doAuthSubmit()" id="auth-submit-btn">Entrar</button>
     <div class="auth-error" id="auth-error"></div>
-    <div class="auth-switch"><span id="auth-toggle-label">Não tem conta?</span> <a onclick="toggleAuthMode()" id="auth-toggle-link">Cadastre-se</a></div>
+    <div class="auth-switch" id="auth-forgot-row"><a onclick="forgotPassword()">Esqueci minha senha</a></div>
+    <div class="auth-switch" id="auth-switch-row"><span id="auth-toggle-label">Não tem conta?</span> <a onclick="toggleAuthMode()" id="auth-toggle-link">Cadastre-se</a></div>
   </div>
 </div>
 
@@ -606,11 +611,52 @@ function toggleAuthMode() {
   err.style.display = 'none'; err.style.color = 'var(--red)';
 }
 
-async function doAuthSubmit() {
+async function forgotPassword() {
   const email = document.getElementById('auth-email').value.trim();
-  const pass = document.getElementById('auth-pass').value;
   const err = document.getElementById('auth-error');
   err.style.display = 'none'; err.style.color = 'var(--red)';
+  if (!email) { err.textContent = 'Informe seu e-mail para receber o link de redefinição.'; err.style.display = 'block'; return; }
+  const { error } = await sb.auth.resetPasswordForEmail(email);
+  if (error) { err.textContent = error.message; err.style.display = 'block'; return; }
+  err.textContent = 'Enviamos um link de redefinição para ' + email + '. Confira sua caixa de entrada.';
+  err.style.color = 'var(--green)'; err.style.display = 'block';
+}
+
+function enterRecoveryMode() {
+  authMode = 'recovery';
+  document.getElementById('auth-mode-label').textContent = 'Defina sua nova senha';
+  document.getElementById('auth-google-btn').style.display = 'none';
+  document.getElementById('auth-google-divider').style.display = 'none';
+  document.getElementById('auth-email-field').style.display = 'none';
+  document.getElementById('auth-nome-field').style.display = 'none';
+  document.getElementById('auth-pass-label').textContent = 'Nova senha';
+  document.getElementById('auth-pass-confirm-field').style.display = 'block';
+  document.getElementById('auth-submit-btn').textContent = 'Salvar nova senha';
+  document.getElementById('auth-forgot-row').style.display = 'none';
+  document.getElementById('auth-switch-row').style.display = 'none';
+  document.getElementById('auth-screen').style.display = 'flex';
+}
+
+async function doAuthSubmit() {
+  const err = document.getElementById('auth-error');
+  err.style.display = 'none'; err.style.color = 'var(--red)';
+
+  if (authMode === 'recovery') {
+    const pass = document.getElementById('auth-pass').value;
+    const confirm = document.getElementById('auth-pass-confirm').value;
+    if (pass.length < 8) { err.textContent = 'A senha deve ter pelo menos 8 caracteres.'; err.style.display = 'block'; return; }
+    if (pass !== confirm) { err.textContent = 'As senhas não coincidem.'; err.style.display = 'block'; return; }
+    const { error } = await sb.auth.updateUser({ password: pass });
+    if (error) { err.textContent = error.message; err.style.display = 'block'; return; }
+    err.textContent = 'Senha atualizada! Redirecionando…';
+    err.style.color = 'var(--green)'; err.style.display = 'block';
+    const { data: { session } } = await sb.auth.getSession();
+    setTimeout(() => onAuthed(session.user), 1200);
+    return;
+  }
+
+  const email = document.getElementById('auth-email').value.trim();
+  const pass = document.getElementById('auth-pass').value;
   if (!email || !pass) { err.textContent = 'Preencha e-mail e senha.'; err.style.display = 'block'; return; }
 
   if (authMode === 'signup') {
@@ -651,6 +697,10 @@ async function initAuth() {
   if (session) onAuthed(session.user);
   else document.getElementById('auth-screen').style.display = 'flex';
 }
+
+sb.auth.onAuthStateChange((event) => {
+  if (event === 'PASSWORD_RECOVERY') enterRecoveryMode();
+});
 
 async function loginComGoogle() {
   const { error } = await sb.auth.signInWithOAuth({ provider: 'google', options: { redirectTo: window.location.origin + '/app' } });
