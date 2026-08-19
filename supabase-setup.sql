@@ -120,10 +120,14 @@ create table if not exists public.integracoes_erp (
   refresh_token  text not null,
   expires_at     timestamptz not null,
   ultima_sincronizacao timestamptz,
+  bling_cnpj     text,
   created_at     timestamptz default now(),
   updated_at     timestamptz default now(),
   unique (subscriber_id, provider)
 );
+
+-- Trava obrigatória: o mesmo CNPJ do Bling não pode estar ligado a duas contas MeuArgus.
+create unique index if not exists integracoes_erp_bling_cnpj_key on public.integracoes_erp(bling_cnpj) where bling_cnpj is not null;
 
 alter table public.integracoes_erp enable row level security;
 -- Nenhuma policy para anon/authenticated: só o service_role (usado pelo backend) acessa esta tabela.

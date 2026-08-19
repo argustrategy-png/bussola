@@ -1279,10 +1279,19 @@ async function desconectarBling() {
   await checkBlingStatus();
 }
 
+const BLING_ERROS = {
+  cnpj_ja_conectado: 'Essa conta Bling já está conectada a outra conta MeuArgus. Cada empresa no Bling só pode estar ligada a uma única conta.',
+  token_exchange_failed: 'Não foi possível concluir a autorização com o Bling. Tente conectar novamente.',
+  save_failed: 'Erro ao salvar a conexão. Tente novamente em instantes.',
+};
+
 function handleBlingRedirectParams() {
   const params = new URLSearchParams(location.search);
   if (params.get('bling_conectado')) { showSync('Bling conectado ✓'); checkBlingStatus(); }
-  if (params.get('bling_erro')) { showSync('Erro ao conectar Bling: ' + params.get('bling_erro'), true); }
+  if (params.get('bling_erro')) {
+    const codigo = params.get('bling_erro');
+    showSync(BLING_ERROS[codigo] || ('Erro ao conectar Bling: ' + codigo), true);
+  }
   if (params.has('bling_conectado') || params.has('bling_erro')) {
     history.replaceState({}, '', location.pathname);
   }

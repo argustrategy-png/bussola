@@ -6,6 +6,7 @@
 //   SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY
 
 const BLING_TOKEN_URL = 'https://www.bling.com.br/Api/v3/oauth/token';
+const BLING_EMPRESAS_URL = 'https://api.bling.com.br/Api/v3/empresas';
 
 export default async function handler(req, res) {
   const { code, state, error } = req.query;
@@ -50,6 +51,34 @@ export default async function handler(req, res) {
     const supabaseUrl = process.env.SUPABASE_URL;
     const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
+    // Identifica a empresa no Bling (CNPJ) para impedir que a mesma conta Bling
+    // seja conectada a mais de uma conta MeuArgus.
+    let blingCnpj = null;
+    try {
+      const empresaResp = await fetch(BLING_EMPRESAS_URL, {
+        headers: { Authorization: `Bearer ${tokenData.access_token}`, Accept: 'application/json' },
+      });
+      if (empresaResp.ok) {
+        const empresaJson = await empresaResp.json();
+        const empresa = empresaJson?.data?.[0] || empresaJson?.data || empresaJson;
+        blingCnpj = empresa?.cnpj || empresa?.documento || null;
+      }
+    } catch (e) {
+      console.error('Falha ao buscar dados da empresa no Bling', e);
+    }
+
+    if (blingCnpj) {
+      const checkResp = await fetch(
+        `${supabaseUrl}/rest/v1/integracoes_erp?bling_cnpj=eq.${encodeURIComponent(blingCnpj)}&select=subscriber_id`,
+        { headers: { apikey: serviceKey, Authorization: `Bearer ${serviceKey}` } }
+      );
+      const existing = await checkResp.json();
+      const jaConectadoEmOutraConta = existing?.some((row) => row.subscriber_id !== subscriberId);
+      if (jaConectadoEmOutraConta) {
+        return res.redirect('/app?bling_erro=cnpj_ja_conectado');
+      }
+    }
+
     const upsertResp = await fetch(`${supabaseUrl}/rest/v1/integracoes_erp`, {
       method: 'POST',
       headers: {
@@ -64,6 +93,7 @@ export default async function handler(req, res) {
         access_token: tokenData.access_token,
         refresh_token: tokenData.refresh_token,
         expires_at: expiresAt,
+        bling_cnpj: blingCnpj,
         updated_at: new Date().toISOString(),
       }),
     });
