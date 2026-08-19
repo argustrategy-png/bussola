@@ -52,7 +52,8 @@ export default async function handler(req, res) {
     const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
     // Identifica a empresa no Bling (CNPJ) para impedir que a mesma conta Bling
-    // seja conectada a mais de uma conta MeuArgus.
+    // seja conectada a mais de uma conta MeuArgus. Isso é obrigatório: se não
+    // conseguirmos confirmar o CNPJ, não prosseguimos com a conexão.
     let blingCnpj = null;
     try {
       const empresaResp = await fetch(BLING_EMPRESAS_URL, {
@@ -62,21 +63,26 @@ export default async function handler(req, res) {
         const empresaJson = await empresaResp.json();
         const empresa = empresaJson?.data?.[0] || empresaJson?.data || empresaJson;
         blingCnpj = empresa?.cnpj || empresa?.documento || null;
+      } else {
+        const errText = await empresaResp.text();
+        console.error('Bling /empresas falhou', empresaResp.status, errText);
       }
     } catch (e) {
       console.error('Falha ao buscar dados da empresa no Bling', e);
     }
 
-    if (blingCnpj) {
-      const checkResp = await fetch(
-        `${supabaseUrl}/rest/v1/integracoes_erp?bling_cnpj=eq.${encodeURIComponent(blingCnpj)}&select=subscriber_id`,
-        { headers: { apikey: serviceKey, Authorization: `Bearer ${serviceKey}` } }
-      );
-      const existing = await checkResp.json();
-      const jaConectadoEmOutraConta = existing?.some((row) => row.subscriber_id !== subscriberId);
-      if (jaConectadoEmOutraConta) {
-        return res.redirect('/app?bling_erro=cnpj_ja_conectado');
-      }
+    if (!blingCnpj) {
+      return res.redirect('/app?bling_erro=cnpj_nao_verificado');
+    }
+
+    const checkResp = await fetch(
+      `${supabaseUrl}/rest/v1/integracoes_erp?bling_cnpj=eq.${encodeURIComponent(blingCnpj)}&select=subscriber_id`,
+      { headers: { apikey: serviceKey, Authorization: `Bearer ${serviceKey}` } }
+    );
+    const existing = await checkResp.json();
+    const jaConectadoEmOutraConta = existing?.some((row) => row.subscriber_id !== subscriberId);
+    if (jaConectadoEmOutraConta) {
+      return res.redirect('/app?bling_erro=cnpj_ja_conectado');
     }
 
     const upsertResp = await fetch(`${supabaseUrl}/rest/v1/integracoes_erp`, {
