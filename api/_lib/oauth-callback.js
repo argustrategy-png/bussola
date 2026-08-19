@@ -20,20 +20,18 @@ export async function handleOAuthCallback(providerName, req, res) {
     const { accessToken, refreshToken, expiresIn } = await provider.exchangeCode({ code, redirectUri });
     const expiresAt = new Date(Date.now() + expiresIn * 1000).toISOString();
 
-    // TEMPORÁRIO: a checagem de "1 conta ERP = 1 conta MeuArgus" deveria ser
-    // obrigatória, mas o endpoint fetchAccountId do Bling está retornando 404
-    // (path incorreto, ainda não confirmado na documentação). Por ora, se a
-    // verificação falhar, deixamos conectar mesmo assim (best-effort) em vez
-    // de bloquear a integração inteira — reverter para bloqueio assim que o
-    // endpoint certo for confirmado. Ver console.error abaixo para diagnóstico.
-    let erpAccountId = null;
+    // Obrigatório: identifica a conta do ERP (CNPJ no Bling, realmId no
+    // QuickBooks...). Se não der pra confirmar, não prosseguimos — é o que
+    // impede a mesma conta de ERP de ser usada em duas contas MeuArgus.
+    let erpAccountId;
     try {
       erpAccountId = await provider.fetchAccountId({ accessToken, realmId });
     } catch (e) {
-      console.error(`${providerName} fetchAccountId falhou (seguindo sem a trava de conta única)`, e);
+      console.error(`${providerName} fetchAccountId falhou`, e);
+      return res.redirect(`/app?erp_erro=conta_nao_verificada&provider=${providerName}`);
     }
 
-    if (erpAccountId && await erpAccountJaConectadoEmOutraConta(providerName, erpAccountId, subscriberId)) {
+    if (await erpAccountJaConectadoEmOutraConta(providerName, erpAccountId, subscriberId)) {
       return res.redirect(`/app?erp_erro=ja_conectado&provider=${providerName}`);
     }
 

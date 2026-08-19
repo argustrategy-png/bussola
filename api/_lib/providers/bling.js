@@ -3,7 +3,7 @@
 // fetchAccountId(), fetchContas(), mapConta().
 
 const TOKEN_URL = 'https://www.bling.com.br/Api/v3/oauth/token';
-const EMPRESAS_URL = 'https://api.bling.com.br/Api/v3/empresas';
+const EMPRESAS_URL = 'https://api.bling.com.br/Api/v3/empresas/me/dados-basicos';
 const API_BASE = 'https://api.bling.com.br/Api/v3';
 
 export const bling = {
@@ -71,22 +71,27 @@ export const bling = {
     return json?.data || [];
   },
 
+  // Confirmado contra o OpenAPI oficial do Bling (ContasDadosBaseDTO): a
+  // listagem só traz id/situacao/vencimento/valor/contato.id — sem nome do
+  // contato, categoria ou histórico. Pra trazer o nome do contato seria
+  // preciso um GET /contatos/{id} por lançamento (não implementado ainda,
+  // por custo de N chamadas extra por sincronização).
   mapConta(conta, tipo, subscriberId) {
-    const situacaoId = conta.situacao?.id ?? conta.situacao;
-    const status = situacaoId === 2 || situacaoId === '2' ? 'pago' : 'pendente';
+    // situacao: 1 Aberto, 2 Pago, 3 Parcial, 4 Devolvido, 5 Cancelado, 6 Devolvido parcial, 7 Confirmado
+    const status = conta.situacao === 2 ? 'pago' : 'pendente';
     return {
       subscriber_id: subscriberId,
       tipo,
-      descricao: conta.historico || conta.numeroDocumento || `Conta ${tipo} Bling #${conta.id}`,
+      descricao: `Conta ${tipo === 'pagar' ? 'a pagar' : 'a receber'} Bling #${conta.id}`,
       valor: Number(conta.valor) || 0,
-      vencimento: conta.vencimento || conta.dataVencimento || null,
-      categoria: conta.categoria?.descricao || conta.categoria?.nome || null,
+      vencimento: conta.vencimento || null,
+      categoria: null,
       status,
       recorrencia: 'none',
       toc: tipo === 'pagar' ? 'do' : 'na',
       origem: 'erp',
-      contraparte: conta.contato?.nome || conta.contato?.name || null,
-      contraparte_telefone: conta.contato?.telefone || conta.contato?.celular || null,
+      contraparte: conta.contato?.id ? `Contato Bling #${conta.contato.id}` : null,
+      contraparte_telefone: null,
       erp_id: `bling:${conta.id}`,
     };
   },
