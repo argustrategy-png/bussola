@@ -31,6 +31,12 @@ async function stripeGet(path) {
   return resp.json();
 }
 
+// Desde a API 2025-03-31.basil, current_period_end saiu do Subscription e
+// foi para cada item da assinatura (billing por item, não mais por assinatura inteira).
+function currentPeriodEnd(sub) {
+  return sub.current_period_end ?? sub.items?.data?.[0]?.current_period_end;
+}
+
 async function updateSubscriberByCustomer(stripeCustomerId, patch) {
   const supabaseUrl = process.env.SUPABASE_URL;
   const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -62,7 +68,7 @@ export default async function handler(req, res) {
             plano: 'pro',
             status: 'ativo',
             stripe_subscription_id: sub.id,
-            expira: new Date(sub.current_period_end * 1000).toISOString().split('T')[0],
+            expira: new Date(currentPeriodEnd(sub) * 1000).toISOString().split('T')[0],
           });
         }
         break;
@@ -74,7 +80,7 @@ export default async function handler(req, res) {
           : 'expirado';
         await updateSubscriberByCustomer(sub.customer, {
           status,
-          expira: new Date(sub.current_period_end * 1000).toISOString().split('T')[0],
+          expira: new Date(currentPeriodEnd(sub) * 1000).toISOString().split('T')[0],
         });
         break;
       }
