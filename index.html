@@ -9,6 +9,7 @@
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/xlsx-populate@1.21.0/browser/xlsx-populate.min.js"></script>
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; }
 
@@ -563,7 +564,7 @@
       <div>
         <div class="import-step-title">Baixe o modelo</div>
         <div class="import-step-text">Já vem com exemplos preenchidos — é só apagar e colocar as suas contas no lugar.</div>
-        <button class="btn btn-secondary" style="margin-top:10px" onclick="downloadTemplate()">⬇ Baixar planilha modelo (Excel)</button>
+        <button class="btn btn-secondary" style="margin-top:10px" id="btn-template" onclick="downloadTemplate()">⬇ Baixar planilha modelo (Excel)</button>
       </div>
     </div>
     <div class="import-step">
@@ -1428,7 +1429,8 @@ function parseVencimentoBR(raw) {
     return `${raw.getFullYear()}-${String(raw.getMonth()+1).padStart(2,'0')}-${String(raw.getDate()).padStart(2,'0')}`;
   }
   const s = String(raw ?? '').trim();
-  if (/^\d{2}\/\d{2}\/\d{4}$/.test(s)) return s.split('/').reverse().join('-');
+  const br = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+  if (br) return `${br[3]}-${br[2].padStart(2,'0')}-${br[1].padStart(2,'0')}`;
   if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return s;
   return '';
 }
@@ -1438,9 +1440,22 @@ function normalizeHeader(h) { return String(h ?? '').trim().toLowerCase().normal
 function showImportError(msg) { const el = document.getElementById('import-error'); el.textContent = msg; el.style.display = 'block'; }
 function hideImportError() { document.getElementById('import-error').style.display = 'none'; }
 
+// Acha a linha de cabeçalho mesmo se houver uma linha de instruções acima
+// (como no modelo baixável, que tem um aviso na linha 1 e os cabeçalhos na 2).
+function encontrarLinhaCabecalho(rows) {
+  const marcas = { tipo: ['tipo'], valor: ['valor'], descricao: ['descricao','descrição','desc'] };
+  for (let i = 0; i < Math.min(rows.length, 10); i++) {
+    const norm = (rows[i] || []).map(normalizeHeader);
+    const achou = k => norm.some(h => marcas[k].some(a => h.startsWith(a)));
+    if (achou('tipo') && achou('valor') && achou('descricao')) return i;
+  }
+  return 0;
+}
+
 function processRows(rows) {
   if (!rows || rows.length < 2) { showImportError('Não encontrei nenhuma linha preenchida nessa planilha.'); return; }
-  const headers = rows[0].map(normalizeHeader);
+  const headerRowIdx = encontrarLinhaCabecalho(rows);
+  const headers = (rows[headerRowIdx] || []).map(normalizeHeader);
   const col = k => {
     const alts = {
       tipo: ['tipo'], descricao: ['descricao','descrição','desc'], valor: ['valor'],
@@ -1466,7 +1481,7 @@ function processRows(rows) {
 
   pendingImport = [];
   const linhasComProblema = [];
-  for (let i = 1; i < rows.length; i++) {
+  for (let i = headerRowIdx + 1; i < rows.length; i++) {
     const c = rows[i];
     if (!c || c.every(v => String(v ?? '').trim() === '')) continue;
     const tipo = normTipo(c[ci.tipo]);
@@ -1508,21 +1523,82 @@ async function confirmImport() {
 }
 function cancelImport() { document.getElementById('import-result').style.display='none'; document.getElementById('file-input').value=''; hideImportError(); }
 
-function downloadTemplate() {
-  const headers = ['Tipo (Pagar ou Receber)', 'Descrição', 'Valor (R$)', 'Vencimento (dia/mês/ano)', 'Categoria', 'Cliente ou Fornecedor', 'Fixo ou Variável'];
-  const aoa = [
-    ['PREENCHA UMA LINHA PARA CADA CONTA. As linhas de exemplo abaixo (em itálico) são só pra mostrar o formato — apague e coloque as suas contas no lugar.'],
-    headers,
-    ['Receber', 'Venda de produtos - cliente João', 1500, '05/09/2026', 'Vendas', 'João da Silva Materiais', ''],
-    ['Pagar', 'Aluguel da loja', 2200, '10/09/2026', 'Infraestrutura', '', 'Fixo'],
-    ['Pagar', 'Compra de matéria-prima', 850.5, '15/09/2026', 'Produção', 'Fornecedor ABC Ltda', 'Variável'],
-  ];
-  const ws = XLSX.utils.aoa_to_sheet(aoa);
-  ws['!merges'] = [{ s: { r: 0, c: 0 }, e: { r: 0, c: headers.length - 1 } }];
-  ws['!cols'] = [{ wch: 20 }, { wch: 32 }, { wch: 14 }, { wch: 22 }, { wch: 16 }, { wch: 26 }, { wch: 16 }];
-  const wb = XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(wb, ws, 'Contas');
-  XLSX.writeFile(wb, 'modelo-meuargus.xlsx');
+async function downloadTemplate() {
+  const btn = document.getElementById('btn-template');
+  const textoOriginal = btn.textContent;
+  btn.disabled = true; btn.textContent = 'Gerando planilha...';
+  try {
+    const AZUL = '2563EB', AZUL_CLARO = 'DBEAFE', AMBAR = 'FEF3C7', AMBAR_TEXTO = '92400E', BORDA = 'D1D5DB', FUNDO_EXEMPLO = 'F3F4F6';
+    const borda = { style: 'thin', color: BORDA };
+    const bordaCompleta = { top: borda, bottom: borda, left: borda, right: borda };
+
+    const workbook = await XlsxPopulate.fromBlankAsync();
+    const sheet = workbook.sheet(0);
+    sheet.name('Contas');
+
+    const headers = ['Tipo *', 'Descrição *', 'Valor (R$) *', 'Vencimento *', 'Categoria', 'Cliente ou Fornecedor', 'Fixo ou Variável'];
+    const nCols = headers.length;
+    const ultimaLinha = 60;
+
+    // Linha 1 — instruções
+    sheet.range(1, 1, 1, nCols).merged(true);
+    sheet.cell('A1')
+      .value('Preencha uma linha para cada conta. Campos com * são obrigatórios. As linhas 3 e 4 são exemplos — apague antes de enviar.')
+      .style({ bold: true, fill: AMBAR, fontColor: AMBAR_TEXTO, wrapText: true, verticalAlignment: 'center' });
+    sheet.row(1).height(34);
+
+    // Linha 2 — cabeçalho
+    headers.forEach((h, i) => {
+      const obrigatorio = h.includes('*');
+      sheet.cell(2, i + 1).value(h).style({
+        bold: true, fill: obrigatorio ? AZUL : AZUL_CLARO, fontColor: obrigatorio ? 'FFFFFF' : '1E3A8A',
+        wrapText: true, verticalAlignment: 'center', horizontalAlignment: 'center', border: bordaCompleta,
+      });
+    });
+    sheet.row(2).height(30);
+
+    // Linhas 3-4 — exemplos preenchidos (dados reais: número e data de verdade, não texto)
+    const exemplos = [
+      ['Receber', 'Venda de produtos (EXEMPLO — apague)', 1500, new Date(2026, 8, 5), 'Vendas', 'João da Silva Materiais', ''],
+      ['Pagar', 'Aluguel da loja (EXEMPLO — apague)', 2200, new Date(2026, 8, 10), 'Infraestrutura', '', 'Fixo'],
+    ];
+    exemplos.forEach((linha, r) => {
+      linha.forEach((v, c) => {
+        const cell = sheet.cell(3 + r, c + 1).value(v).style({ italic: true, fontColor: '6B7280', fill: FUNDO_EXEMPLO, border: bordaCompleta });
+        if (c === 2) cell.style('numberFormat', '#,##0.00');
+        if (c === 3) cell.style('numberFormat', 'dd/mm/yyyy');
+      });
+    });
+
+    // Linhas 5-60 — área pronta pra preencher, já com borda e formato de número/data
+    sheet.range(5, 1, ultimaLinha, nCols).style({ border: bordaCompleta });
+    sheet.range(5, 3, ultimaLinha, 3).style('numberFormat', '#,##0.00');
+    sheet.range(5, 4, ultimaLinha, 4).style('numberFormat', 'dd/mm/yyyy');
+
+    // Dropdowns: Tipo e Fixo/Variável, da linha 3 até o fim da área
+    sheet.range(3, 1, ultimaLinha, 1).dataValidation({
+      type: 'list', allowBlank: true, formula1: '"Pagar,Receber"', showDropDown: true,
+      error: 'Escolha "Pagar" ou "Receber" na lista.', errorTitle: 'Valor inválido', errorStyle: 'stop',
+    });
+    sheet.range(3, 7, ultimaLinha, 7).dataValidation({
+      type: 'list', allowBlank: true, formula1: '"Fixo,Variável"', showDropDown: true,
+      error: 'Escolha "Fixo" ou "Variável" na lista.', errorTitle: 'Valor inválido', errorStyle: 'stop',
+    });
+
+    const larguras = [12, 34, 14, 14, 18, 26, 16];
+    larguras.forEach((w, i) => sheet.column(i + 1).width(w));
+    sheet.freezePanes(0, 2);
+
+    const blob = await workbook.outputAsync();
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = 'modelo-meuargus.xlsx'; a.click();
+    setTimeout(() => URL.revokeObjectURL(url), 4000);
+  } catch (err) {
+    alert('Não consegui gerar a planilha modelo agora. Tenta de novo em alguns segundos.');
+  } finally {
+    btn.disabled = false; btn.textContent = textoOriginal;
+  }
 }
 
 // ─── INTEGRAÇÃO COM ERPs (biblioteca multi-provedor) ─────
