@@ -8,6 +8,7 @@
 <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@600;700&family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; }
 
@@ -139,8 +140,15 @@
   .drop-area { border: 2px dashed var(--border); border-radius: 10px; padding: 40px; text-align: center; color: var(--text2); cursor: pointer; transition: all 0.2s; margin-bottom: 16px; background: var(--surface2); }
   .drop-area:hover, .drop-area.drag { border-color: var(--accent); color: var(--accent); }
   .drop-area input { display: none; }
-  .import-help { font-size: 0.82rem; color: var(--text2); margin-bottom: 16px; line-height: 1.7; }
+  .import-help { font-size: 0.88rem; color: var(--text2); margin-bottom: 20px; line-height: 1.7; }
   .import-help code { background: var(--surface2); border: 1px solid var(--border); padding: 2px 7px; border-radius: 4px; font-size: 0.78rem; color: var(--accent); }
+  .import-steps { display: flex; flex-direction: column; gap: 4px; margin-bottom: 24px; }
+  .import-step { display: flex; gap: 14px; padding: 16px 4px; border-bottom: 1px solid var(--border); }
+  .import-step:last-child { border-bottom: none; }
+  .import-step-num { flex: none; width: 26px; height: 26px; border-radius: 50%; background: var(--accent); color: #fff; font-weight: 700; font-size: 0.85rem; display: flex; align-items: center; justify-content: center; }
+  .import-step-title { font-weight: 600; margin-bottom: 4px; }
+  .import-step-text { font-size: 0.84rem; color: var(--text2); line-height: 1.6; }
+  .import-error { background: var(--red-dim); border: 1px solid rgba(220,38,38,.25); color: var(--red); border-radius: 8px; padding: 12px 16px; font-size: 0.85rem; margin-bottom: 16px; line-height: 1.6; }
   .erp-note { display:flex; gap:10px; align-items:flex-start; background: var(--blue-dim); border: 1px solid rgba(37,99,235,.2); border-radius: 10px; padding: 14px 16px; margin-bottom: 20px; font-size: .84rem; color: var(--text); line-height: 1.6; }
 
   .filter-row { display: flex; gap: 10px; margin-bottom: 16px; flex-wrap: wrap; align-items: flex-end; }
@@ -546,20 +554,47 @@
     </div>
   </div>
 
-  <div class="section-title" style="margin-top:28px">Importar CSV</div>
-  <p class="import-help">
-    Colunas obrigatórias: <code>tipo</code> (pagar/receber) · <code>descricao</code> · <code>valor</code> · <code>vencimento</code> (DD/MM/AAAA)<br>
-    Colunas opcionais: <code>categoria</code> · <code>custo</code> (variavel ou fixo) · <code>cliente</code> (para contas a receber, alimenta a Régua de Cobrança)
-  </p>
+  <div class="section-title" style="margin-top:28px">Importar planilha de contas</div>
+  <p class="import-help">Sem ERP? Sem problema. Baixe a planilha modelo, preencha uma linha para cada conta e envie de volta aqui.</p>
+
+  <div class="import-steps">
+    <div class="import-step">
+      <div class="import-step-num">1</div>
+      <div>
+        <div class="import-step-title">Baixe o modelo</div>
+        <div class="import-step-text">Já vem com exemplos preenchidos — é só apagar e colocar as suas contas no lugar.</div>
+        <button class="btn btn-secondary" style="margin-top:10px" onclick="downloadTemplate()">⬇ Baixar planilha modelo (Excel)</button>
+      </div>
+    </div>
+    <div class="import-step">
+      <div class="import-step-num">2</div>
+      <div>
+        <div class="import-step-title">Preencha uma linha por conta</div>
+        <div class="import-step-text">
+          <strong>Tipo:</strong> escreva "Pagar" ou "Receber" · <strong>Valor:</strong> só o número, ex.: 1500,00 · <strong>Vencimento:</strong> dia/mês/ano, ex.: 05/09/2026<br>
+          Categoria, Cliente/Fornecedor e Fixo/Variável são opcionais — deixe em branco se não souber.
+        </div>
+      </div>
+    </div>
+    <div class="import-step">
+      <div class="import-step-num">3</div>
+      <div>
+        <div class="import-step-title">Envie a planilha preenchida</div>
+        <div class="import-step-text">Aceita Excel (.xlsx) ou CSV.</div>
+      </div>
+    </div>
+  </div>
+
   <div class="drop-area" id="drop-area" onclick="document.getElementById('file-input').click()"
     ondragover="event.preventDefault();this.classList.add('drag')"
     ondragleave="this.classList.remove('drag')"
     ondrop="handleDrop(event)">
-    <input type="file" id="file-input" accept=".csv,.txt" onchange="handleFile(this.files[0])">
+    <input type="file" id="file-input" accept=".csv,.txt,.xlsx,.xls" onchange="handleFile(this.files[0])">
     <div style="font-size:2rem;margin-bottom:8px">📂</div>
-    <div>Clique ou arraste seu arquivo CSV aqui</div>
-    <div style="font-size:0.8rem;margin-top:4px">.csv ou .txt</div>
+    <div>Clique ou arraste sua planilha preenchida aqui</div>
+    <div style="font-size:0.8rem;margin-top:4px">.xlsx, .xls, .csv ou .txt</div>
   </div>
+  <div id="import-error" class="import-error" style="display:none"></div>
   <div id="import-result" style="display:none">
     <div id="import-msg" style="margin-bottom:12px;font-weight:600;"></div>
     <div class="table-wrap"><table id="import-preview"><thead></thead><tbody></tbody></table></div>
@@ -567,9 +602,6 @@
       <button class="btn btn-primary" onclick="confirmImport()">Importar tudo</button>
       <button class="btn btn-secondary" onclick="cancelImport()">Cancelar</button>
     </div>
-  </div>
-  <div style="margin-top:24px">
-    <button class="btn btn-secondary" onclick="downloadTemplate()">⬇ Baixar modelo CSV</button>
   </div>
 </div>
 </div><!-- /#app-content -->
@@ -1338,42 +1370,133 @@ function renderPrevisao() {
 
 // ─── IMPORT ──────────────────────────────────────────────
 function handleDrop(e) { e.preventDefault(); document.getElementById('drop-area').classList.remove('drag'); handleFile(e.dataTransfer.files[0]); }
-function handleFile(file) { if(!file) return; const r = new FileReader(); r.onload = e => parseCSV(e.target.result); r.readAsText(file,'UTF-8'); }
-function parseCSV(text) {
-  const lines = text.trim().split(/\r?\n/);
-  if (lines.length < 2) { alert('Arquivo vazio.'); return; }
-  const sep = lines[0].includes(';') ? ';' : ',';
-  const headers = lines[0].split(sep).map(h => h.trim().toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,''));
-  const col = k => { const alts = {tipo:['tipo','type'],descricao:['descricao','descrição','desc','description'],valor:['valor','value','amount'],vencimento:['vencimento','data','due','due_date'],categoria:['categoria','category','cat'],toc:['toc','custo','classificacao','class'],contraparte:['cliente','fornecedor','contraparte','client','supplier'],telefone:['telefone','whatsapp','phone','celular']}; for(const a of (alts[k]||[k])){ const i=headers.indexOf(a); if(i>=0) return i; } return -1; };
-  const ci = {tipo:col('tipo'),desc:col('descricao'),valor:col('valor'),venc:col('vencimento'),cat:col('categoria'),toc:col('toc'),cp:col('contraparte'),tel:col('telefone')};
-  if (ci.tipo<0||ci.desc<0||ci.valor<0||ci.venc<0) { alert('Colunas obrigatórias não encontradas: tipo, descricao, valor, vencimento'); return; }
-  pendingImport = [];
-  for (let i=1;i<lines.length;i++) {
-    if (!lines[i].trim()) continue;
-    const c = lines[i].split(sep);
-    const tipo = (c[ci.tipo]||'').trim().toLowerCase();
-    const desc = (c[ci.desc]||'').trim();
-    const valor = parseFloat((c[ci.valor]||'0').replace(',','.').replace(/[^\d.]/g,''));
-    let venc = (c[ci.venc]||'').trim();
-    if (/\d{2}\/\d{2}\/\d{4}/.test(venc)) venc = venc.split('/').reverse().join('-');
-    const cat = ci.cat>=0?(c[ci.cat]||'').trim():'';
-    const contraparte = ci.cp>=0?(c[ci.cp]||'').trim():'';
-    const telefone = ci.tel>=0?(c[ci.tel]||'').trim():'';
-    let toc = ci.toc>=0?(c[ci.toc]||'do').trim().toLowerCase():'do';
-    if (toc === 'variavel' || toc === 'variável') toc = 'ctv';
-    if (toc === 'fixo') toc = 'do';
-    if (!['pagar','receber'].includes(tipo)||!desc||!valor||!venc) continue;
-    pendingImport.push({id:uid(),tipo,descricao:desc,valor,vencimento:venc,categoria:cat,contraparte:contraparte||null,contraparte_telefone:telefone||null,status:'pendente',recorrencia:'none',toc,origem:'importado'});
+
+function handleFile(file) {
+  if (!file) return;
+  hideImportError();
+  const ext = (file.name.split('.').pop() || '').toLowerCase();
+  if (ext === 'xlsx' || ext === 'xls') {
+    const r = new FileReader();
+    r.onload = e => {
+      try {
+        const wb = XLSX.read(new Uint8Array(e.target.result), { type: 'array', cellDates: true });
+        const sheet = wb.Sheets[wb.SheetNames[0]];
+        const rows = XLSX.utils.sheet_to_json(sheet, { header: 1, raw: true, defval: '' });
+        processRows(rows);
+      } catch (err) {
+        showImportError('Não consegui abrir esse arquivo. Confira se é mesmo uma planilha Excel (.xlsx) e tente de novo.');
+      }
+    };
+    r.readAsArrayBuffer(file);
+  } else {
+    const r = new FileReader();
+    r.onload = e => {
+      const text = e.target.result;
+      const lines = text.trim().split(/\r?\n/);
+      const sep = lines[0].includes(';') ? ';' : ',';
+      const rows = lines.filter(l => l.trim()).map(l => l.split(sep).map(c => c.trim()));
+      processRows(rows);
+    };
+    r.readAsText(file, 'UTF-8');
   }
-  if (!pendingImport.length) { alert('Nenhum registro válido.'); return; }
-  document.getElementById('import-result').style.display='block';
-  document.getElementById('import-msg').textContent = `${pendingImport.length} registro(s) encontrado(s). Revise e confirme:`;
-  const tbl = document.getElementById('import-preview');
-  tbl.querySelector('thead').innerHTML='<tr><th>Tipo</th><th>Descrição</th><th>Vencimento</th><th>Valor</th><th>Custo</th></tr>';
-  tbl.querySelector('tbody').innerHTML = pendingImport.slice(0,20).map(r =>
-    `<tr><td><span class="badge ${r.tipo}">${r.tipo}</span></td><td>${r.descricao}</td><td>${fmtDate(r.vencimento)}</td><td>${fmt(r.valor)}</td><td><span class="badge ${r.toc}">${r.toc==='ctv'?'VARIÁVEL':'FIXO'}</span></td></tr>`
-  ).join('') + (pendingImport.length>20?`<tr><td colspan="5" class="empty">...e mais ${pendingImport.length-20} registros</td></tr>`:'');
 }
+
+// Converte texto ou número em valor numérico, aceitando formato brasileiro
+// (1.500,00) e americano (1500.00) sem confundir separador de milhar com decimal.
+function parseValorBR(raw) {
+  if (typeof raw === 'number') return raw;
+  let s = String(raw ?? '').trim();
+  if (!s) return NaN;
+  s = s.replace(/[^\d.,-]/g, '');
+  const hasComma = s.includes(','), hasDot = s.includes('.');
+  if (hasComma && hasDot) {
+    s = s.replace(/\./g, '').replace(',', '.');
+  } else if (hasComma && !hasDot) {
+    s = s.replace(',', '.');
+  } else if (hasDot && !hasComma) {
+    const parts = s.split('.');
+    if (parts.length > 2) s = parts.join('');
+    else if (parts[1] && parts[1].length === 3) s = parts.join('');
+  }
+  const n = parseFloat(s);
+  return isNaN(n) ? NaN : n;
+}
+
+// Converte data (Date do Excel, "DD/MM/AAAA" ou "AAAA-MM-DD") pro formato ISO.
+function parseVencimentoBR(raw) {
+  if (raw instanceof Date && !isNaN(raw)) {
+    return `${raw.getFullYear()}-${String(raw.getMonth()+1).padStart(2,'0')}-${String(raw.getDate()).padStart(2,'0')}`;
+  }
+  const s = String(raw ?? '').trim();
+  if (/^\d{2}\/\d{2}\/\d{4}$/.test(s)) return s.split('/').reverse().join('-');
+  if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return s;
+  return '';
+}
+
+function normalizeHeader(h) { return String(h ?? '').trim().toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, ''); }
+
+function showImportError(msg) { const el = document.getElementById('import-error'); el.textContent = msg; el.style.display = 'block'; }
+function hideImportError() { document.getElementById('import-error').style.display = 'none'; }
+
+function processRows(rows) {
+  if (!rows || rows.length < 2) { showImportError('Não encontrei nenhuma linha preenchida nessa planilha.'); return; }
+  const headers = rows[0].map(normalizeHeader);
+  const col = k => {
+    const alts = {
+      tipo: ['tipo'], descricao: ['descricao','descrição','desc'], valor: ['valor'],
+      vencimento: ['vencimento','data'], categoria: ['categoria'],
+      toc: ['fixo','custo','classificacao'],
+      contraparte: ['cliente','fornecedor','contraparte'], telefone: ['telefone','whatsapp','celular'],
+    };
+    for (const a of (alts[k] || [k])) { const i = headers.findIndex(h => h.startsWith(a)); if (i >= 0) return i; }
+    return -1;
+  };
+  const ci = { tipo: col('tipo'), desc: col('descricao'), valor: col('valor'), venc: col('vencimento'), cat: col('categoria'), toc: col('toc'), cp: col('contraparte'), tel: col('telefone') };
+  if (ci.tipo < 0 || ci.desc < 0 || ci.valor < 0 || ci.venc < 0) {
+    showImportError('Não encontrei as colunas Tipo, Descrição, Valor e Vencimento nessa planilha. Baixe o modelo (passo 1) pra ver o formato certo.');
+    return;
+  }
+
+  const tipoAlts = { pagar: ['pagar','despesa','saida','saída'], receber: ['receber','receita','entrada'] };
+  const normTipo = v => {
+    const s = normalizeHeader(v);
+    for (const t of Object.keys(tipoAlts)) if (tipoAlts[t].some(a => s.startsWith(a))) return t;
+    return '';
+  };
+
+  pendingImport = [];
+  const linhasComProblema = [];
+  for (let i = 1; i < rows.length; i++) {
+    const c = rows[i];
+    if (!c || c.every(v => String(v ?? '').trim() === '')) continue;
+    const tipo = normTipo(c[ci.tipo]);
+    const desc = String(c[ci.desc] ?? '').trim();
+    const valor = parseValorBR(c[ci.valor]);
+    const venc = parseVencimentoBR(c[ci.venc]);
+    const cat = ci.cat >= 0 ? String(c[ci.cat] ?? '').trim() : '';
+    const contraparte = ci.cp >= 0 ? String(c[ci.cp] ?? '').trim() : '';
+    const telefone = ci.tel >= 0 ? String(c[ci.tel] ?? '').trim() : '';
+    let toc = ci.toc >= 0 ? normalizeHeader(c[ci.toc] || 'fixo') : 'fixo';
+    toc = toc.startsWith('vari') ? 'ctv' : 'do';
+    if (!tipo || !desc || !valor || isNaN(valor) || !venc) { linhasComProblema.push(i + 1); continue; }
+    pendingImport.push({ id: uid(), tipo, descricao: desc, valor, vencimento: venc, categoria: cat, contraparte: contraparte || null, contraparte_telefone: telefone || null, status: 'pendente', recorrencia: 'none', toc, origem: 'importado' });
+  }
+
+  if (!pendingImport.length) {
+    showImportError('Nenhuma linha ficou completa. Confira se Tipo, Descrição, Valor e Vencimento estão preenchidos em cada conta.');
+    return;
+  }
+  document.getElementById('import-result').style.display = 'block';
+  let msg = `${pendingImport.length} conta(s) encontrada(s). Revise e confirme:`;
+  if (linhasComProblema.length) msg += ` (${linhasComProblema.length} linha(s) ignorada(s) por faltar informação — linha ${linhasComProblema.join(', ')})`;
+  document.getElementById('import-msg').textContent = msg;
+  const tbl = document.getElementById('import-preview');
+  tbl.querySelector('thead').innerHTML = '<tr><th>Tipo</th><th>Descrição</th><th>Vencimento</th><th>Valor</th><th>Custo</th></tr>';
+  tbl.querySelector('tbody').innerHTML = pendingImport.slice(0, 20).map(r =>
+    `<tr><td><span class="badge ${r.tipo}">${r.tipo}</span></td><td>${r.descricao}</td><td>${fmtDate(r.vencimento)}</td><td>${fmt(r.valor)}</td><td><span class="badge ${r.toc}">${r.toc==='ctv'?'VARIÁVEL':'FIXO'}</span></td></tr>`
+  ).join('') + (pendingImport.length > 20 ? `<tr><td colspan="5" class="empty">...e mais ${pendingImport.length-20} registros</td></tr>` : '');
+}
+
 async function confirmImport() {
   const toInsert = pendingImport.map(({ id: _ignore, ...rest }) => ({ ...rest, subscriber_id: currentUser.id }));
   const { data: rows, error } = await sb.from('lancamentos').insert(toInsert).select();
@@ -1383,10 +1506,23 @@ async function confirmImport() {
   cancelImport(); pendingImport = [];
   renderTable(); refreshAll();
 }
-function cancelImport() { document.getElementById('import-result').style.display='none'; document.getElementById('file-input').value=''; }
+function cancelImport() { document.getElementById('import-result').style.display='none'; document.getElementById('file-input').value=''; hideImportError(); }
+
 function downloadTemplate() {
-  const csv='tipo,descricao,valor,vencimento,categoria,custo,cliente\nreceber,Venda produto A,1500.00,01/07/2026,Vendas,,Cliente Exemplo Ltda\npagar,Aluguel,2000.00,05/07/2026,Infraestrutura,fixo,\npagar,Matéria-prima,800.00,10/07/2026,Produção,variavel,\n';
-  const a=document.createElement('a'); a.href='data:text/csv;charset=utf-8,'+encodeURIComponent(csv); a.download='modelo-meuargus.csv'; a.click();
+  const headers = ['Tipo (Pagar ou Receber)', 'Descrição', 'Valor (R$)', 'Vencimento (dia/mês/ano)', 'Categoria', 'Cliente ou Fornecedor', 'Fixo ou Variável'];
+  const aoa = [
+    ['PREENCHA UMA LINHA PARA CADA CONTA. As linhas de exemplo abaixo (em itálico) são só pra mostrar o formato — apague e coloque as suas contas no lugar.'],
+    headers,
+    ['Receber', 'Venda de produtos - cliente João', 1500, '05/09/2026', 'Vendas', 'João da Silva Materiais', ''],
+    ['Pagar', 'Aluguel da loja', 2200, '10/09/2026', 'Infraestrutura', '', 'Fixo'],
+    ['Pagar', 'Compra de matéria-prima', 850.5, '15/09/2026', 'Produção', 'Fornecedor ABC Ltda', 'Variável'],
+  ];
+  const ws = XLSX.utils.aoa_to_sheet(aoa);
+  ws['!merges'] = [{ s: { r: 0, c: 0 }, e: { r: 0, c: headers.length - 1 } }];
+  ws['!cols'] = [{ wch: 20 }, { wch: 32 }, { wch: 14 }, { wch: 22 }, { wch: 16 }, { wch: 26 }, { wch: 16 }];
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, 'Contas');
+  XLSX.writeFile(wb, 'modelo-meuargus.xlsx');
 }
 
 // ─── INTEGRAÇÃO COM ERPs (biblioteca multi-provedor) ─────
