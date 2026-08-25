@@ -1532,38 +1532,48 @@ async function downloadTemplate() {
     const borda = { style: 'thin', color: BORDA };
     const bordaCompleta = { top: borda, bottom: borda, left: borda, right: borda };
 
+    // Poucos estilos, reaproveitados em várias células — em vez de um objeto
+    // novo por célula, o que costuma inflar a tabela de estilos do xlsx e é a
+    // causa mais comum de arquivo vindo "quebrado" (Excel/Numbers descartam
+    // o que não conseguem ler ao reparar o arquivo).
+    const estiloBanner = { bold: true, fill: AMBAR, fontColor: AMBAR_TEXTO, wrapText: true, verticalAlignment: 'center', border: bordaCompleta };
+    const estiloCabecalhoObrigatorio = { bold: true, fill: AZUL, fontColor: 'FFFFFF', wrapText: true, verticalAlignment: 'center', horizontalAlignment: 'center', border: bordaCompleta };
+    const estiloCabecalhoOpcional = { bold: true, fill: AZUL_CLARO, fontColor: '1E3A8A', wrapText: true, verticalAlignment: 'center', horizontalAlignment: 'center', border: bordaCompleta };
+    const estiloExemplo = { italic: true, fontColor: '6B7280', fill: FUNDO_EXEMPLO, wrapText: true, verticalAlignment: 'center', border: bordaCompleta };
+    const estiloTexto = { verticalAlignment: 'center', border: bordaCompleta };
+    const estiloTextoQuebra = { verticalAlignment: 'center', border: bordaCompleta, wrapText: true };
+    const estiloMoeda = { verticalAlignment: 'center', border: bordaCompleta, numberFormat: '#,##0.00' };
+    const estiloData = { verticalAlignment: 'center', border: bordaCompleta, numberFormat: 'dd/mm/yyyy' };
+
     const workbook = await XlsxPopulate.fromBlankAsync();
     const sheet = workbook.sheet(0);
     sheet.name('Contas');
 
     const headers = ['Tipo *', 'Descrição *', 'Valor (R$) *', 'Vencimento *', 'Categoria', 'Cliente ou Fornecedor', 'Fixo ou Variável'];
     const nCols = headers.length;
-    const ultimaLinha = 60;
+    const ultimaLinha = 40;
 
     // Linha 1 — instruções
     sheet.range(1, 1, 1, nCols).merged(true);
     sheet.cell('A1')
       .value('Já deixamos as despesas mais comuns de loja preenchidas — você só precisa colocar o Valor e o Vencimento de cada uma que você tem. Não usa uma dessas contas? Deixe o Valor em branco que ela não entra. Quer adicionar outra? Use uma linha em branco lá embaixo. A linha 3 é só um exemplo de como fica uma linha completa.')
-      .style({ bold: true, fill: AMBAR, fontColor: AMBAR_TEXTO, wrapText: true, verticalAlignment: 'center' });
+      .style(estiloBanner);
     sheet.row(1).height(48);
 
     // Linha 2 — cabeçalho
     headers.forEach((h, i) => {
       const obrigatorio = h.includes('*');
-      sheet.cell(2, i + 1).value(h).style({
-        bold: true, fill: obrigatorio ? AZUL : AZUL_CLARO, fontColor: obrigatorio ? 'FFFFFF' : '1E3A8A',
-        wrapText: true, verticalAlignment: 'center', horizontalAlignment: 'center', border: bordaCompleta,
-      });
+      sheet.cell(2, i + 1).value(h).style(obrigatorio ? estiloCabecalhoObrigatorio : estiloCabecalhoOpcional);
     });
     sheet.row(2).height(30);
 
     // Linha 3 — um exemplo completo (já com valor e data), só pra mostrar o formato
     const exemplo = ['Receber', 'Venda de produtos (EXEMPLO — isto aqui é só ilustrativo)', 1500, new Date(2026, 8, 5), 'Vendas', 'João da Silva Materiais', ''];
     exemplo.forEach((v, c) => {
-      const cell = sheet.cell(3, c + 1).value(v).style({ italic: true, fontColor: '6B7280', fill: FUNDO_EXEMPLO, wrapText: true, verticalAlignment: 'center', border: bordaCompleta });
-      if (c === 2) cell.style('numberFormat', '#,##0.00');
-      if (c === 3) cell.style('numberFormat', 'dd/mm/yyyy');
+      sheet.cell(3, c + 1).value(v).style(estiloExemplo);
     });
+    sheet.cell(3, 3).style('numberFormat', '#,##0.00');
+    sheet.cell(3, 4).style('numberFormat', 'dd/mm/yyyy');
     sheet.row(3).height(30);
 
     // Linhas 4+ — checklist com as despesas mais comuns de uma loja de rua já
@@ -1591,36 +1601,27 @@ async function downloadTemplate() {
     checklist.forEach((item, i) => {
       const linha = primeiraLinhaChecklist + i;
       const [tipo, desc, categoria, toc] = item;
-      sheet.cell(linha, 1).value(tipo).style({ border: bordaCompleta, verticalAlignment: 'center' });
-      sheet.cell(linha, 2).value(desc).style({ border: bordaCompleta, wrapText: true, verticalAlignment: 'center' });
-      sheet.cell(linha, 3).style({ border: bordaCompleta, numberFormat: '#,##0.00', verticalAlignment: 'center' });
-      sheet.cell(linha, 4).style({ border: bordaCompleta, numberFormat: 'dd/mm/yyyy', verticalAlignment: 'center' });
-      sheet.cell(linha, 5).value(categoria).style({ border: bordaCompleta, verticalAlignment: 'center' });
-      sheet.cell(linha, 6).style({ border: bordaCompleta, verticalAlignment: 'center' });
-      sheet.cell(linha, 7).value(toc).style({ border: bordaCompleta, verticalAlignment: 'center' });
+      sheet.cell(linha, 1).value(tipo).style(estiloTexto);
+      sheet.cell(linha, 2).value(desc).style(estiloTextoQuebra);
+      sheet.cell(linha, 3).style(estiloMoeda);
+      sheet.cell(linha, 4).style(estiloData);
+      sheet.cell(linha, 5).value(categoria).style(estiloTexto);
+      sheet.cell(linha, 6).style(estiloTexto);
+      sheet.cell(linha, 7).value(toc).style(estiloTexto);
       sheet.row(linha).height(desc.length > 60 ? 42 : 22);
     });
 
     // Linhas seguintes — área em branco pra adicionar outras contas, já com
     // borda e formato de número/data prontos
     const primeiraLinhaLivre = primeiraLinhaChecklist + checklist.length;
-    sheet.range(primeiraLinhaLivre, 1, ultimaLinha, nCols).style({ border: bordaCompleta });
-    sheet.range(primeiraLinhaLivre, 3, ultimaLinha, 3).style('numberFormat', '#,##0.00');
-    sheet.range(primeiraLinhaLivre, 4, ultimaLinha, 4).style('numberFormat', 'dd/mm/yyyy');
-
-    // Dropdowns: Tipo e Fixo/Variável, da linha 3 até o fim da área
-    sheet.range(3, 1, ultimaLinha, 1).dataValidation({
-      type: 'list', allowBlank: true, formula1: '"Pagar,Receber"', showDropDown: true,
-      error: 'Escolha "Pagar" ou "Receber" na lista.', errorTitle: 'Valor inválido', errorStyle: 'stop',
-    });
-    sheet.range(3, 7, ultimaLinha, 7).dataValidation({
-      type: 'list', allowBlank: true, formula1: '"Fixo,Variável"', showDropDown: true,
-      error: 'Escolha "Fixo" ou "Variável" na lista.', errorTitle: 'Valor inválido', errorStyle: 'stop',
-    });
+    for (let linha = primeiraLinhaLivre; linha <= ultimaLinha; linha++) {
+      for (let c = 1; c <= nCols; c++) {
+        sheet.cell(linha, c).style(c === 3 ? estiloMoeda : c === 4 ? estiloData : estiloTexto);
+      }
+    }
 
     const larguras = [12, 48, 14, 14, 18, 26, 16];
     larguras.forEach((w, i) => sheet.column(i + 1).width(w));
-    sheet.freezePanes(0, 2);
 
     const blob = await workbook.outputAsync();
     const url = URL.createObjectURL(blob);
