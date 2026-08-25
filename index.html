@@ -1551,7 +1551,7 @@ async function downloadTemplate() {
 
     const headers = ['Tipo *', 'Descrição *', 'Valor (R$) *', 'Vencimento *', 'Categoria', 'Cliente ou Fornecedor', 'Fixo ou Variável'];
     const nCols = headers.length;
-    const ultimaLinha = 40;
+    const ultimaLinha = 48;
 
     // Linha 1 — instruções
     sheet.range(1, 1, 1, nCols).merged(true);
@@ -1593,7 +1593,6 @@ async function downloadTemplate() {
       ['Pagar', 'Faxina / limpeza', 'Serviços', 'Fixo'],
       ['Pagar', 'Taxa da maquininha de cartão – débito (desconto que a operadora de cartão cobra em cima de cada venda no débito)', 'Despesas financeiras', 'Variável'],
       ['Pagar', 'Taxa da maquininha de cartão – crédito (desconto que a operadora de cartão cobra em cima de cada venda no crédito)', 'Despesas financeiras', 'Variável'],
-      ['Pagar', 'Compra de mercadoria (fornecedor)', 'Mercadoria', 'Variável'],
       ['Receber', 'Vendas do dia (dinheiro ou Pix)', 'Vendas', ''],
       ['Receber', 'Vendas no cartão (a receber da operadora)', 'Vendas', ''],
     ];
@@ -1611,9 +1610,33 @@ async function downloadTemplate() {
       sheet.row(linha).height(desc.length > 60 ? 42 : 22);
     });
 
+    // Seção de fornecedores — uma loja de varejo normalmente compra de vários
+    // fornecedores diferentes, então em vez de uma linha genérica só, reserva
+    // um bloco inteiro já com Tipo/Categoria/Fixo-Variável prontos; a pessoa
+    // só digita o nome do fornecedor, o valor e a data de cada compra.
+    const linhaTituloFornecedores = primeiraLinhaChecklist + checklist.length;
+    sheet.range(linhaTituloFornecedores, 1, linhaTituloFornecedores, nCols).merged(true);
+    sheet.cell(linhaTituloFornecedores, 1)
+      .value('Compras de mercadoria — uma linha para cada fornecedor/compra (é normal ter vários)')
+      .style(estiloCabecalhoOpcional);
+    sheet.row(linhaTituloFornecedores).height(30);
+
+    const primeiraLinhaFornecedores = linhaTituloFornecedores + 1;
+    const totalLinhasFornecedores = 20;
+    for (let i = 0; i < totalLinhasFornecedores; i++) {
+      const linha = primeiraLinhaFornecedores + i;
+      sheet.cell(linha, 1).value('Pagar').style(estiloTexto);
+      sheet.cell(linha, 2).value('Compra de mercadoria').style(estiloTexto);
+      sheet.cell(linha, 3).style(estiloMoeda);
+      sheet.cell(linha, 4).style(estiloData);
+      sheet.cell(linha, 5).value('Mercadoria').style(estiloTexto);
+      sheet.cell(linha, 6).style(estiloTexto);
+      sheet.cell(linha, 7).value('Variável').style(estiloTexto);
+    }
+
     // Linhas seguintes — área em branco pra adicionar outras contas, já com
     // borda e formato de número/data prontos
-    const primeiraLinhaLivre = primeiraLinhaChecklist + checklist.length;
+    const primeiraLinhaLivre = primeiraLinhaFornecedores + totalLinhasFornecedores;
     for (let linha = primeiraLinhaLivre; linha <= ultimaLinha; linha++) {
       for (let c = 1; c <= nCols; c++) {
         sheet.cell(linha, c).style(c === 3 ? estiloMoeda : c === 4 ? estiloData : estiloTexto);
