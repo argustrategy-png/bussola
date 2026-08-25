@@ -1372,6 +1372,24 @@ function renderPrevisao() {
 // ─── IMPORT ──────────────────────────────────────────────
 function handleDrop(e) { e.preventDefault(); document.getElementById('drop-area').classList.remove('drag'); handleFile(e.dataTransfer.files[0]); }
 
+// Divide uma linha de CSV respeitando campos entre aspas (ex: "Aluguel, sala 2")
+// — um split ingênuo pelo separador quebraria esse tipo de descrição ao meio.
+function splitLinhaCSV(linha, sep) {
+  const out = [];
+  let atual = '', entreAspas = false;
+  for (let i = 0; i < linha.length; i++) {
+    const ch = linha[i];
+    if (entreAspas) {
+      if (ch === '"') { if (linha[i + 1] === '"') { atual += '"'; i++; } else entreAspas = false; }
+      else atual += ch;
+    } else if (ch === '"') entreAspas = true;
+    else if (ch === sep) { out.push(atual.trim()); atual = ''; }
+    else atual += ch;
+  }
+  out.push(atual.trim());
+  return out;
+}
+
 function handleFile(file) {
   if (!file) return;
   hideImportError();
@@ -1381,9 +1399,7 @@ function handleFile(file) {
     r.onload = e => {
       try {
         const wb = XLSX.read(new Uint8Array(e.target.result), { type: 'array', cellDates: true });
-        const sheet = wb.Sheets[wb.SheetNames[0]];
-        const rows = XLSX.utils.sheet_to_json(sheet, { header: 1, raw: true, defval: '' });
-        processRows(rows);
+        processRows(linhasDaAbaCerta(wb));
       } catch (err) {
         showImportError('Não consegui abrir esse arquivo. Confira se é mesmo uma planilha Excel (.xlsx) e tente de novo.');
       }
@@ -1395,7 +1411,7 @@ function handleFile(file) {
       const text = e.target.result;
       const lines = text.trim().split(/\r?\n/);
       const sep = lines[0].includes(';') ? ';' : ',';
-      const rows = lines.filter(l => l.trim()).map(l => l.split(sep).map(c => c.trim()));
+      const rows = lines.filter(l => l.trim()).map(l => splitLinhaCSV(l, sep));
       processRows(rows);
     };
     r.readAsText(file, 'UTF-8');
@@ -1424,14 +1440,31 @@ function parseValorBR(raw) {
 }
 
 // Converte data (Date do Excel, "DD/MM/AAAA" ou "AAAA-MM-DD") pro formato ISO.
+// Confere se ano/mês/dia formam uma data que existe de verdade no calendário
+// (rejeita 31/02, dia 32, mês 13...) — sem isso, uma data digitada errada
+// derruba o lote de importação inteiro no banco, não só aquela linha.
+function dataCalendarioValida(ano, mes, dia) {
+  const d = new Date(ano, mes - 1, dia);
+  return d.getFullYear() === ano && d.getMonth() === mes - 1 && d.getDate() === dia;
+}
+
 function parseVencimentoBR(raw) {
   if (raw instanceof Date && !isNaN(raw)) {
     return `${raw.getFullYear()}-${String(raw.getMonth()+1).padStart(2,'0')}-${String(raw.getDate()).padStart(2,'0')}`;
   }
   const s = String(raw ?? '').trim();
   const br = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
-  if (br) return `${br[3]}-${br[2].padStart(2,'0')}-${br[1].padStart(2,'0')}`;
-  if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return s;
+  if (br) {
+    const dia = parseInt(br[1], 10), mes = parseInt(br[2], 10), ano = parseInt(br[3], 10);
+    if (!dataCalendarioValida(ano, mes, dia)) return '';
+    return `${ano}-${String(mes).padStart(2,'0')}-${String(dia).padStart(2,'0')}`;
+  }
+  const iso = s.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (iso) {
+    const ano = parseInt(iso[1], 10), mes = parseInt(iso[2], 10), dia = parseInt(iso[3], 10);
+    if (!dataCalendarioValida(ano, mes, dia)) return '';
+    return s;
+  }
   return '';
 }
 
@@ -1442,14 +1475,32 @@ function hideImportError() { document.getElementById('import-error').style.displ
 
 // Acha a linha de cabeçalho mesmo se houver uma linha de instruções acima
 // (como no modelo baixável, que tem um aviso na linha 1 e os cabeçalhos na 2).
-function encontrarLinhaCabecalho(rows) {
+// Devolve -1 se não achar nenhuma linha parecida com cabeçalho.
+function procurarCabecalho(rows) {
   const marcas = { tipo: ['tipo'], valor: ['valor'], descricao: ['descricao','descrição','desc'] };
   for (let i = 0; i < Math.min(rows.length, 10); i++) {
     const norm = (rows[i] || []).map(normalizeHeader);
     const achou = k => norm.some(h => marcas[k].some(a => h.startsWith(a)));
     if (achou('tipo') && achou('valor') && achou('descricao')) return i;
   }
-  return 0;
+  return -1;
+}
+function encontrarLinhaCabecalho(rows) {
+  const i = procurarCabecalho(rows);
+  return i < 0 ? 0 : i;
+}
+
+// Planilhas às vezes têm mais de uma aba (ex: uma aba de notas antes da aba
+// de verdade). Usa a primeira aba que tiver uma linha de cabeçalho reconhecível
+// em vez de sempre assumir que é a primeira da lista.
+function linhasDaAbaCerta(workbook) {
+  let candidata = null;
+  for (const nome of workbook.SheetNames) {
+    const rows = XLSX.utils.sheet_to_json(workbook.Sheets[nome], { header: 1, raw: true, defval: '' });
+    if (!candidata) candidata = rows;
+    if (procurarCabecalho(rows) >= 0) return rows;
+  }
+  return candidata || [];
 }
 
 function processRows(rows) {
@@ -1493,7 +1544,15 @@ function processRows(rows) {
     const telefone = ci.tel >= 0 ? String(c[ci.tel] ?? '').trim() : '';
     let toc = ci.toc >= 0 ? normalizeHeader(c[ci.toc] || 'fixo') : 'fixo';
     toc = toc.startsWith('vari') ? 'ctv' : 'do';
-    if (!tipo || !desc || !valor || isNaN(valor) || !venc) { linhasComProblema.push(i + 1); continue; }
+    if (!tipo || !desc || !valor || isNaN(valor) || !venc) {
+      // Linha do checklist que a pessoa não usou (Valor e Vencimento os dois em
+      // branco) não é erro, é o esperado — só avisa quando ela começou a
+      // preencher um dos dois e não terminou o outro (aí sim pode ser descuido).
+      const valorDigitado = String(c[ci.valor] ?? '').trim() !== '';
+      const vencDigitado = String(c[ci.venc] ?? '').trim() !== '';
+      if (valorDigitado || vencDigitado) linhasComProblema.push(i + 1);
+      continue;
+    }
     pendingImport.push({ id: uid(), tipo, descricao: desc, valor, vencimento: venc, categoria: cat, contraparte: contraparte || null, contraparte_telefone: telefone || null, status: 'pendente', recorrencia: 'none', toc, origem: 'importado' });
   }
 
@@ -1503,7 +1562,10 @@ function processRows(rows) {
   }
   document.getElementById('import-result').style.display = 'block';
   let msg = `${pendingImport.length} conta(s) prontas pra importar. Revise e confirme:`;
-  if (linhasComProblema.length) msg += ` (as outras ${linhasComProblema.length} linha(s) da planilha estavam sem valor ou data e não foram contadas — sem problema, é só isso)`;
+  if (linhasComProblema.length) {
+    const plural = linhasComProblema.length > 1;
+    msg += ` (falta valor ou data na${plural?'s':''} linha${plural?'s':''} ${linhasComProblema.join(', ')} — confira se quiser incluir ${plural?'elas':'ela'} também)`;
+  }
   document.getElementById('import-msg').textContent = msg;
   const tbl = document.getElementById('import-preview');
   tbl.querySelector('thead').innerHTML = '<tr><th>Tipo</th><th>Descrição</th><th>Vencimento</th><th>Valor</th><th>Custo</th></tr>';
@@ -1515,9 +1577,27 @@ function processRows(rows) {
 async function confirmImport() {
   const toInsert = pendingImport.map(({ id: _ignore, ...rest }) => ({ ...rest, subscriber_id: currentUser.id }));
   const { data: rows, error } = await sb.from('lancamentos').insert(toInsert).select();
-  if (error) { showSync('Erro ao importar ✗', true); return; }
-  data.push(...(rows||[]));
-  showSync(`${rows.length} lançamentos importados ✓`);
+  if (!error) {
+    data.push(...(rows || []));
+    showSync(`${rows.length} lançamentos importados ✓`);
+    cancelImport(); pendingImport = [];
+    renderTable(); refreshAll();
+    return;
+  }
+  // O lote inteiro é gravado de uma vez só — se uma linha tiver um valor que o
+  // banco rejeita, todas as outras (mesmo as corretas) cairiam junto. Tenta de
+  // novo uma por uma pra salvar o que der certo em vez de perder tudo.
+  let sucesso = 0, falhas = 0;
+  for (const item of toInsert) {
+    const { data: row, error: err } = await sb.from('lancamentos').insert(item).select().single();
+    if (err) { falhas++; continue; }
+    data.push(row); sucesso++;
+  }
+  if (sucesso > 0) {
+    showSync(`${sucesso} lançamento(s) importado(s) ✓${falhas ? ` — ${falhas} não entraram, confira os valores dessas linhas` : ''}`, falhas > 0);
+  } else {
+    showSync('Erro ao importar ✗', true);
+  }
   cancelImport(); pendingImport = [];
   renderTable(); refreshAll();
 }
