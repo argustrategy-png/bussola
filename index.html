@@ -60,6 +60,8 @@
   header h1 { font-family: 'Playfair Display', serif; font-size: 1.2rem; font-weight: 600; color: var(--accent); letter-spacing: 0.02em; }
   header span { font-size: 0.78rem; color: var(--text2); letter-spacing: 0.04em; text-transform: uppercase; }
   .header-actions { margin-left: auto; display: flex; align-items: center; gap: 10px; }
+  .trial-badge { font-size: .78rem; font-weight: 600; padding: 5px 11px; border-radius: 100px; background: var(--amber-dim); color: var(--amber); white-space: nowrap; }
+  .trial-badge.urgente { background: var(--red-dim); color: var(--red); }
   .theme-toggle { background: var(--surface2); border: 1px solid var(--border); color: var(--text); width: 34px; height: 34px; border-radius: 8px; cursor: pointer; font-size: 1rem; display:flex; align-items:center; justify-content:center; }
   .btn-logout { background: none; border: 1px solid var(--border); color: var(--text2); padding: 7px 14px; border-radius: 7px; cursor: pointer; font-size: .78rem; font-family: 'Inter', sans-serif; }
   .btn-logout:hover { border-color: var(--red); color: var(--red); }
@@ -302,8 +304,10 @@
     <span id="hd-subtitle"></span>
   </div>
   <div class="header-actions">
+    <span id="hd-trial-badge" class="trial-badge" style="display:none"></span>
     <span style="font-size:.78rem;color:var(--text2)">Logado como <strong id="hd-email" style="color:var(--text)"></strong></span>
     <button class="theme-toggle" onclick="toggleTheme()" id="theme-toggle-app">🌙</button>
+    <button class="theme-toggle" onclick="abrirModalAssinatura()" id="btn-config" title="Assinatura e pagamento">⚙️</button>
     <button class="btn-logout" onclick="doLogout()">Sair</button>
   </div>
 </header>
@@ -605,6 +609,27 @@
     </div>
   </div>
 </div>
+
+<!-- Modal de assinatura: antecipar pagamento (trial) ou trocar forma de pagamento (já
+     assinante) — fica fora de qualquer aba porque a engrenagem que abre ele está no
+     cabeçalho, acessível de qualquer tela. -->
+<div class="modal-bg" id="modal-assinatura">
+  <div class="modal">
+    <div class="modal-header">
+      <h2>Assinatura</h2>
+      <button class="modal-close" onclick="fecharModalAssinatura()">✕</button>
+    </div>
+    <div class="modal-body">
+      <div id="assinatura-status" style="font-size:.9rem;color:var(--text2);margin-bottom:18px;line-height:1.6"></div>
+      <div id="assinatura-error" style="display:none;color:var(--red);font-size:.85rem;margin-bottom:12px"></div>
+      <button class="btn btn-primary" style="width:100%" id="btn-assinar-agora" onclick="assinarAgoraModal()">Assinar agora</button>
+      <button class="btn btn-secondary" style="width:100%;margin-top:10px" id="btn-portal-stripe" onclick="abrirPortalStripe()">Alterar forma de pagamento</button>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-secondary" onclick="fecharModalAssinatura()">Fechar</button>
+    </div>
+  </div>
+</div>
 </div><!-- /#app-content -->
 
 <script>
@@ -682,6 +707,7 @@ function acaoCobranca(r, tplKey, dias) {
 let chartFluxo, chartPrevisao;
 let pendingImport = [];
 let currentUser = null;
+let perfilAssinante = null;
 let authMode = 'login';
 
 // ── AUTH ──────────────────────────────────────────────────
@@ -774,6 +800,7 @@ async function onAuthed(user) {
   document.getElementById('auth-screen').style.display = 'none';
 
   const { data: perfil } = await sb.from('subscribers').select('status,plano,expira,is_admin').eq('id', user.id).single();
+  perfilAssinante = perfil;
   const trialVencido = perfil?.status === 'trial' && perfil.expira && new Date(perfil.expira + 'T23:59:59') < new Date();
   if (perfil && !perfil.is_admin && (perfil.status === 'expirado' || trialVencido)) {
     if (trialVencido) sb.from('subscribers').update({ status: 'expirado' }).eq('id', user.id).then(() => {});
@@ -783,6 +810,7 @@ async function onAuthed(user) {
 
   document.getElementById('app-content').style.display = 'block';
   document.getElementById('hd-email').textContent = user.email || '';
+  renderTrialBadge();
   loadData();
   handleErpRedirectParams();
   handleCheckoutRedirectParams();
@@ -805,9 +833,26 @@ function showPaywall() {
   document.getElementById('paywall-screen').style.display = 'flex';
 }
 
-async function assinarAgora() {
-  const btn = document.getElementById('paywall-btn');
-  const err = document.getElementById('paywall-error');
+// Quantos dias faltam pro trial vencer, mostrado como selo no cabeçalho.
+function renderTrialBadge() {
+  const badge = document.getElementById('hd-trial-badge');
+  const perfil = perfilAssinante;
+  if (!perfil || perfil.is_admin || perfil.status !== 'trial' || !perfil.expira) { badge.style.display = 'none'; return; }
+  const hoje = new Date(); hoje.setHours(0, 0, 0, 0);
+  const alvo = new Date(perfil.expira + 'T00:00:00');
+  const dias = Math.round((alvo - hoje) / 86400000);
+  let texto;
+  if (dias <= 0) texto = 'Teste grátis termina hoje';
+  else if (dias === 1) texto = 'Teste grátis termina amanhã';
+  else texto = `Teste grátis: ${dias} dias restantes`;
+  badge.textContent = texto;
+  badge.classList.toggle('urgente', dias <= 3);
+  badge.style.display = 'inline-block';
+}
+
+// Núcleo compartilhado entre o botão do paywall e o do modal de assinatura —
+// os dois só chamam /api/stripe/checkout com botão/erro próprios.
+async function iniciarCheckout(btn, err, textoBotao) {
   err.style.display = 'none';
   btn.disabled = true; btn.textContent = 'Abrindo pagamento…';
   try {
@@ -822,7 +867,66 @@ async function assinarAgora() {
   } catch (e) {
     err.textContent = 'Não foi possível iniciar o pagamento. Tente novamente em instantes.';
     err.style.display = 'block';
-    btn.disabled = false; btn.textContent = 'Assinar agora';
+    btn.disabled = false; btn.textContent = textoBotao;
+  }
+}
+
+async function assinarAgora() {
+  await iniciarCheckout(document.getElementById('paywall-btn'), document.getElementById('paywall-error'), 'Assinar agora');
+}
+
+// ─── MODAL DE ASSINATURA (antecipar pagamento / trocar forma de pagamento) ──
+function abrirModalAssinatura() {
+  const statusEl = document.getElementById('assinatura-status');
+  const btnAssinar = document.getElementById('btn-assinar-agora');
+  const btnPortal = document.getElementById('btn-portal-stripe');
+  document.getElementById('assinatura-error').style.display = 'none';
+  const perfil = perfilAssinante;
+
+  if (perfil?.status === 'ativo') {
+    statusEl.textContent = 'Sua assinatura MeuArgus Pro está ativa. Você pode trocar o cartão ou a forma de pagamento a qualquer momento.';
+    btnAssinar.style.display = 'none';
+    btnPortal.style.display = 'block'; btnPortal.disabled = false; btnPortal.textContent = 'Alterar forma de pagamento';
+  } else if (perfil?.status === 'trial') {
+    const hoje = new Date(); hoje.setHours(0, 0, 0, 0);
+    const alvo = perfil.expira ? new Date(perfil.expira + 'T00:00:00') : null;
+    const dias = alvo ? Math.round((alvo - hoje) / 86400000) : null;
+    statusEl.textContent = dias != null
+      ? `Você ainda está no período de teste grátis (${dias > 0 ? `termina em ${dias} dia(s)` : 'termina hoje'}). Quer começar a pagar agora e não se preocupar mais com isso?`
+      : 'Você está no período de teste grátis. Quer assinar agora?';
+    btnAssinar.style.display = 'block'; btnAssinar.disabled = false; btnAssinar.textContent = 'Assinar agora';
+    btnPortal.style.display = 'none';
+  } else {
+    statusEl.textContent = 'Assine o MeuArgus Pro pra continuar usando o painel e as integrações com ERP.';
+    btnAssinar.style.display = 'block'; btnAssinar.disabled = false; btnAssinar.textContent = 'Assinar agora';
+    btnPortal.style.display = 'none';
+  }
+  document.getElementById('modal-assinatura').classList.add('open');
+}
+function fecharModalAssinatura() { document.getElementById('modal-assinatura').classList.remove('open'); }
+
+async function assinarAgoraModal() {
+  await iniciarCheckout(document.getElementById('btn-assinar-agora'), document.getElementById('assinatura-error'), 'Assinar agora');
+}
+
+async function abrirPortalStripe() {
+  const btn = document.getElementById('btn-portal-stripe');
+  const err = document.getElementById('assinatura-error');
+  err.style.display = 'none';
+  btn.disabled = true; btn.textContent = 'Abrindo...';
+  try {
+    const { data: { session } } = await sb.auth.getSession();
+    const resp = await fetch('/api/stripe/portal', {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${session.access_token}` },
+    });
+    const data = await resp.json();
+    if (!resp.ok || !data.url) throw new Error(data.error || 'Falha ao abrir portal');
+    location.href = data.url;
+  } catch (e) {
+    err.textContent = 'Não foi possível abrir a gestão de pagamento agora. Tente novamente em instantes.';
+    err.style.display = 'block';
+    btn.disabled = false; btn.textContent = 'Alterar forma de pagamento';
   }
 }
 
@@ -1849,6 +1953,7 @@ async function confirmarApiKey() {
 }
 
 document.getElementById('modal-apikey').addEventListener('click', e => { if (e.target === e.currentTarget) closeApiKeyModal(); });
+document.getElementById('modal-assinatura').addEventListener('click', e => { if (e.target === e.currentTarget) fecharModalAssinatura(); });
 
 const ERP_ERROS = {
   ja_conectado: 'Essa conta já está conectada a outra conta MeuArgus. Cada empresa só pode estar ligada a uma única conta.',
