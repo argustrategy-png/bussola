@@ -60,18 +60,8 @@
   header h1 { font-family: 'Playfair Display', serif; font-size: 1.2rem; font-weight: 600; color: var(--accent); letter-spacing: 0.02em; }
   header span { font-size: 0.78rem; color: var(--text2); letter-spacing: 0.04em; text-transform: uppercase; }
   .header-actions { margin-left: auto; display: flex; align-items: center; gap: 10px; }
-  .trial-badge { font-size: .78rem; font-weight: 600; padding: 5px 11px; border-radius: 100px; background: var(--amber-dim); color: var(--amber); white-space: nowrap; }
+  .trial-badge { font-size: .78rem; font-weight: 600; padding: 5px 11px; border-radius: 100px; background: var(--amber-dim); color: var(--amber); white-space: nowrap; font-variant-numeric: tabular-nums; }
   .trial-badge.urgente { background: var(--red-dim); color: var(--red); }
-
-  .trial-countdown { display: flex; align-items: center; gap: 20px; flex-wrap: wrap; background: var(--amber-dim); border: 1px solid var(--amber-border); border-radius: 12px; padding: 16px 22px; margin-bottom: 20px; }
-  .trial-countdown-label { font-weight: 600; color: var(--amber); font-size: .95rem; }
-  .trial-countdown-clock { display: flex; gap: 10px; }
-  .trial-countdown-unit { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 6px 12px; text-align: center; min-width: 56px; }
-  .trial-countdown-unit span { display: block; font-size: 1.3rem; font-weight: 700; color: var(--text); font-variant-numeric: tabular-nums; line-height: 1.1; }
-  .trial-countdown-unit label { display: block; font-size: .65rem; color: var(--text2); text-transform: uppercase; letter-spacing: .05em; margin-top: 2px; }
-  .trial-countdown.urgente { background: var(--red-dim); border-color: var(--red-border); }
-  .trial-countdown.urgente .trial-countdown-label { color: var(--red); }
-  .trial-countdown .btn { margin-left: auto; }
   .theme-toggle { background: var(--surface2); border: 1px solid var(--border); color: var(--text); width: 34px; height: 34px; border-radius: 8px; cursor: pointer; font-size: 1rem; display:flex; align-items:center; justify-content:center; }
   .btn-logout { background: none; border: 1px solid var(--border); color: var(--text2); padding: 7px 14px; border-radius: 7px; cursor: pointer; font-size: .78rem; font-family: 'Inter', sans-serif; }
   .btn-logout:hover { border-color: var(--red); color: var(--red); }
@@ -334,16 +324,6 @@
 
 <!-- PAINEL -->
 <div class="tab active" id="tab-dashboard">
-  <div class="trial-countdown" id="trial-countdown" style="display:none">
-    <div class="trial-countdown-label">⏳ Seu teste grátis termina em</div>
-    <div class="trial-countdown-clock">
-      <div class="trial-countdown-unit"><span id="tc-dias">0</span><label>dias</label></div>
-      <div class="trial-countdown-unit"><span id="tc-horas">00</span><label>horas</label></div>
-      <div class="trial-countdown-unit"><span id="tc-min">00</span><label>min</label></div>
-      <div class="trial-countdown-unit"><span id="tc-seg">00</span><label>seg</label></div>
-    </div>
-    <button class="btn btn-primary" onclick="abrirModalAssinatura()">Assinar agora</button>
-  </div>
   <div class="cards">
     <div class="card blue"><label>Saldo Atual (pago)</label><div class="val" id="c-saldo">R$ 0</div></div>
     <div class="card green"><label>A Receber (próx. 30d)</label><div class="val" id="c-receber">R$ 0</div></div>
@@ -830,7 +810,6 @@ async function onAuthed(user) {
 
   document.getElementById('app-content').style.display = 'block';
   document.getElementById('hd-email').textContent = user.email || '';
-  renderTrialBadge();
   iniciarContadorTrial();
   loadData();
   handleErpRedirectParams();
@@ -854,32 +833,16 @@ function showPaywall() {
   document.getElementById('paywall-screen').style.display = 'flex';
 }
 
-// Quantos dias faltam pro trial vencer, mostrado como selo no cabeçalho.
-function renderTrialBadge() {
-  const badge = document.getElementById('hd-trial-badge');
-  const perfil = perfilAssinante;
-  if (!perfil || perfil.is_admin || perfil.status !== 'trial' || !perfil.expira) { badge.style.display = 'none'; return; }
-  const hoje = new Date(); hoje.setHours(0, 0, 0, 0);
-  const alvo = new Date(perfil.expira + 'T00:00:00');
-  const dias = Math.round((alvo - hoje) / 86400000);
-  let texto;
-  if (dias <= 0) texto = 'Teste grátis termina hoje';
-  else if (dias === 1) texto = 'Teste grátis termina amanhã';
-  else texto = `Teste grátis: ${dias} dias restantes`;
-  badge.textContent = texto;
-  badge.classList.toggle('urgente', dias <= 3);
-  badge.style.display = 'inline-block';
-}
-
-// Contador regressivo ao vivo (dias/horas/min/seg) na tela principal, pra
-// quem ainda está no trial. Quando chega a zero, recarrega a página pra
-// deixar o onAuthed conferir de novo e mostrar o paywall se for o caso.
+// Selo discreto no cabeçalho com a contagem regressiva do trial ao vivo.
+// Mantém granularidade baixa (só dias/horas) enquanto falta tempo de sobra,
+// e só desce pra minutos/segundos quando está mesmo no fim — um selo pequeno
+// não precisa (nem deve) ficar piscando números o tempo todo.
 let trialCountdownInterval = null;
 function iniciarContadorTrial() {
-  const el = document.getElementById('trial-countdown');
+  const badge = document.getElementById('hd-trial-badge');
   const perfil = perfilAssinante;
   if (trialCountdownInterval) { clearInterval(trialCountdownInterval); trialCountdownInterval = null; }
-  if (!perfil || perfil.is_admin || perfil.status !== 'trial' || !perfil.expira) { el.style.display = 'none'; return; }
+  if (!perfil || perfil.is_admin || perfil.status !== 'trial' || !perfil.expira) { badge.style.display = 'none'; return; }
 
   const alvo = new Date(perfil.expira + 'T23:59:59');
   const atualizar = () => {
@@ -889,15 +852,17 @@ function iniciarContadorTrial() {
     const horas = Math.floor((restante % 86400000) / 3600000);
     const min = Math.floor((restante % 3600000) / 60000);
     const seg = Math.floor((restante % 60000) / 1000);
-    document.getElementById('tc-dias').textContent = dias;
-    document.getElementById('tc-horas').textContent = String(horas).padStart(2, '0');
-    document.getElementById('tc-min').textContent = String(min).padStart(2, '0');
-    document.getElementById('tc-seg').textContent = String(seg).padStart(2, '0');
-    el.classList.toggle('urgente', dias < 1);
+    let tempo;
+    if (dias >= 1) tempo = `${dias}d ${horas}h`;
+    else if (horas >= 1) tempo = `${horas}h ${min}min`;
+    else if (min >= 1) tempo = `${min}min`;
+    else tempo = `${seg}s`;
+    badge.textContent = `⏳ Teste grátis: ${tempo}`;
+    badge.classList.toggle('urgente', restante < 3 * 86400000);
   };
   atualizar();
   trialCountdownInterval = setInterval(atualizar, 1000);
-  el.style.display = 'flex';
+  badge.style.display = 'inline-block';
 }
 
 // Núcleo compartilhado entre o botão do paywall e o do modal de assinatura —
