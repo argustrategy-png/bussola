@@ -93,6 +93,16 @@
 
   .chart-wrap { position: relative; height: 280px; margin-bottom: 24px; }
 
+  .gauge-card { display: flex; align-items: center; gap: 24px; background: var(--surface2); border: 1px solid var(--border); border-radius: 14px; padding: 18px 28px; margin-bottom: 24px; flex-wrap: wrap; }
+  .gauge-svg { width: 220px; flex-shrink: 0; }
+  #gauge-needle-group { transition: transform 0.7s cubic-bezier(.34,1.4,.64,1); }
+  .gauge-info { min-width: 200px; }
+  .gauge-title { font-size: 1.25rem; font-weight: 700; margin-bottom: 4px; }
+  .gauge-title.crit { color: var(--red); }
+  .gauge-title.warn { color: var(--amber); }
+  .gauge-title.ok { color: var(--green); }
+  .gauge-sub { font-size: .88rem; color: var(--text2); line-height: 1.5; }
+
   .insights { display: grid; gap: 10px; margin-bottom: 24px; }
   .insight { padding: 14px 16px; border-radius: 8px; border-left: 3px solid; font-size: 0.88rem; background: var(--surface2); }
   .insight.ok   { border-color: var(--green); }
@@ -330,8 +340,22 @@
     <div class="card red"><label>A Pagar (próx. 30d)</label><div class="val" id="c-pagar">R$ 0</div></div>
     <div class="card" id="card-liquido"><label>Saldo Previsto (30d)</label><div class="val" id="c-liquido">R$ 0</div></div>
   </div>
-  <div class="section-title">Saldo Previsto — Próximos 30 dias</div>
-  <div class="chart-wrap" style="height:180px"><canvas id="chartFluxo"></canvas></div>
+  <div class="section-title">Saúde do Caixa — Próximos 30 dias</div>
+  <div class="gauge-card">
+    <svg viewBox="0 0 300 165" class="gauge-svg" role="img" aria-label="Medidor de saúde do caixa, de crítico a saudável">
+      <path d="M 30 150 A 120 120 0 0 1 90 46.1" fill="none" stroke="var(--red)" stroke-width="26" stroke-linecap="round"/>
+      <path d="M 90 46.1 A 120 120 0 0 1 210 46.1" fill="none" stroke="var(--amber)" stroke-width="26" stroke-linecap="round"/>
+      <path d="M 210 46.1 A 120 120 0 0 1 270 150" fill="none" stroke="var(--green)" stroke-width="26" stroke-linecap="round"/>
+      <g id="gauge-needle-group" style="transform-origin:150px 150px">
+        <line x1="150" y1="150" x2="150" y2="42" stroke="var(--text)" stroke-width="4" stroke-linecap="round"/>
+      </g>
+      <circle cx="150" cy="150" r="10" fill="var(--text)"/>
+    </svg>
+    <div class="gauge-info">
+      <div class="gauge-title" id="gauge-title">—</div>
+      <div class="gauge-sub" id="gauge-sub">—</div>
+    </div>
+  </div>
   <div class="section-title">Alertas</div>
   <div class="insights" id="insights-box"></div>
 </div>
@@ -704,7 +728,7 @@ function acaoCobranca(r, tplKey, dias) {
   if (link) return `<a class="btn-whatsapp" href="${link}" target="_blank" rel="noopener">📲 WhatsApp</a>`;
   return `<button class="btn-copy" data-msg="${escMsg}" onclick="copiarMsg(this.dataset.msg)">Copiar msg</button>`;
 }
-let chartFluxo, chartPrevisao;
+let chartPrevisao;
 let pendingImport = [];
 let currentUser = null;
 let perfilAssinante = null;
@@ -1068,50 +1092,59 @@ function renderDashboard() {
   document.getElementById('c-liquido').textContent = fmtSgn(liq);
   const cl = document.getElementById('card-liquido');
   cl.className = 'card ' + (liq >= 0 ? 'green' : 'red');
-  renderChartFluxo();
+  renderGaugeCaixa();
   renderAlertas(saldo, recv30, pag30);
   document.getElementById('hd-subtitle').textContent = `${data.length} lançamentos · Saldo ${fmt(saldo)}`;
 }
 
-function renderChartFluxo() {
+// Velocímetro de saúde do caixa: em vez de uma curva pra interpretar, uma
+// leitura de relance — o ponteiro cai no vermelho quanto mais perto (ou já
+// dentro) do caixa negativo, e no verde quanto mais fôlego sobra.
+function renderGaugeCaixa() {
   const t = today();
-  const labels = [], saldoAcum = [];
   let acum = 0;
   data.filter(r => r.status === 'pago').forEach(r => { acum += r.tipo === 'receber' ? r.valor : -r.valor; });
-  for (let i = 0; i < 30; i++) {
+  const saldoHoje = acum;
+  const horizonte = 30;
+  let diaNegativo = null;
+  for (let i = 0; i < horizonte; i++) {
     const d = addDays(t, i);
-    labels.push(fmtDate(d));
     let ent = 0, sai = 0;
     data.filter(r => r.status !== 'pago' && r.vencimento === d).forEach(r => {
       if (r.tipo === 'receber') ent += r.valor; else sai += r.valor;
     });
-    acum += ent - sai; saldoAcum.push(acum);
+    acum += ent - sai;
+    if (diaNegativo === null && acum < 0) diaNegativo = i;
   }
-  if (chartFluxo) chartFluxo.destroy();
-  const isDark = document.documentElement.getAttribute('data-theme') === 'dark';
-  const tickColor = isDark ? '#7B9DC0' : '#64748B';
-  const gridColor = isDark ? '#1E2F45' : '#E2E8F0';
-  const azul = isDark ? '#60A5FA' : '#2563EB';
-  const vermelho = isDark ? '#F87171' : '#DC2626';
-  // Só a curva do saldo previsto — os detalhes dia a dia de entradas/saídas
-  // já têm um lugar próprio na aba Previsão, não precisam se repetir aqui.
-  chartFluxo = new Chart(document.getElementById('chartFluxo'), {
-    type: 'line',
-    data: { labels, datasets: [{
-      label: 'Saldo previsto', data: saldoAcum, borderWidth: 2.5, pointRadius: 0, tension: 0.3, fill: 'origin',
-      borderColor: azul, backgroundColor: 'rgba(37,99,235,0.1)',
-      segment: {
-        borderColor: ctx => (ctx.p0.parsed.y < 0 || ctx.p1.parsed.y < 0) ? vermelho : azul,
-        backgroundColor: ctx => (ctx.p0.parsed.y < 0 || ctx.p1.parsed.y < 0) ? 'rgba(220,38,38,0.12)' : 'rgba(37,99,235,0.1)',
-      },
-    }]},
-    options: { responsive: true, maintainAspectRatio: false,
-      plugins: { legend: { display: false }, tooltip: { callbacks: { label: ctx => 'Saldo previsto: ' + fmtSgn(ctx.raw) }}},
-      scales: {
-        x: { ticks: { maxRotation: 0, autoSkip: true, maxTicksLimit: 6, font: { size: 10 }, color: tickColor }, grid: { display: false }},
-        y: { ticks: { callback: v => fmt(v), color: tickColor, maxTicksLimit: 5 }, grid: { color: gridColor }}
-      }}
-  });
+  const saldoFinal = acum;
+
+  // fração 0 = já negativo agora (ponteiro no fundo do vermelho)
+  // fração 1 = fica positivo os 30 dias inteiros (ponteiro no fundo do verde)
+  let fracao, titulo, sub, classe;
+  if (saldoHoje < 0) {
+    fracao = 0;
+    titulo = '🚨 Caixa já está negativo';
+    sub = `Saldo atual: ${fmtSgn(saldoHoje)}. Priorize receber o que está em atraso ou negocie prazos.`;
+    classe = 'crit';
+  } else if (diaNegativo !== null) {
+    fracao = diaNegativo / horizonte;
+    const dataCritica = fmtDate(addDays(t, diaNegativo));
+    titulo = diaNegativo === 0 ? '🚨 Caixa fica negativo hoje' : `⚠️ Caixa fica negativo em ${diaNegativo} dia(s)`;
+    sub = `Previsão pra ${dataCritica}. Dá pra antecipar recebíveis ou adiar algum pagamento antes disso.`;
+    classe = diaNegativo <= 7 ? 'crit' : 'warn';
+  } else {
+    fracao = 1;
+    titulo = '✅ Caixa saudável pelos próximos 30 dias';
+    sub = `Saldo previsto no fim do período: ${fmtSgn(saldoFinal)}.`;
+    classe = 'ok';
+  }
+
+  const anguloGraus = (fracao - 0.5) * 180;
+  document.getElementById('gauge-needle-group').style.transform = `rotate(${anguloGraus}deg)`;
+  const tituloEl = document.getElementById('gauge-title');
+  tituloEl.textContent = titulo;
+  tituloEl.className = 'gauge-title ' + classe;
+  document.getElementById('gauge-sub').textContent = sub;
 }
 
 function renderAlertas(saldo, recv30, pag30) {
