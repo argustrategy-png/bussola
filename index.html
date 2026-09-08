@@ -350,8 +350,8 @@
     <div class="card red"><label>A Pagar (próx. 30d)</label><div class="val" id="c-pagar">R$ 0</div></div>
     <div class="card" id="card-liquido"><label>Saldo Previsto (30d)</label><div class="val" id="c-liquido">R$ 0</div></div>
   </div>
-  <div class="section-title">Fluxo Diário — Próximos 30 dias</div>
-  <div class="chart-wrap"><canvas id="chartFluxo"></canvas></div>
+  <div class="section-title">Saldo Previsto — Próximos 30 dias</div>
+  <div class="chart-wrap" style="height:180px"><canvas id="chartFluxo"></canvas></div>
   <div class="section-title">Alertas</div>
   <div class="insights" id="insights-box"></div>
 </div>
@@ -1110,7 +1110,7 @@ function renderDashboard() {
 
 function renderChartFluxo() {
   const t = today();
-  const labels = [], entradas = [], saidas = [], saldoAcum = [];
+  const labels = [], saldoAcum = [];
   let acum = 0;
   data.filter(r => r.status === 'pago').forEach(r => { acum += r.tipo === 'receber' ? r.valor : -r.valor; });
   for (let i = 0; i < 30; i++) {
@@ -1120,25 +1120,31 @@ function renderChartFluxo() {
     data.filter(r => r.status !== 'pago' && r.vencimento === d).forEach(r => {
       if (r.tipo === 'receber') ent += r.valor; else sai += r.valor;
     });
-    entradas.push(ent); saidas.push(sai); acum += ent - sai; saldoAcum.push(acum);
+    acum += ent - sai; saldoAcum.push(acum);
   }
   if (chartFluxo) chartFluxo.destroy();
   const isDark = document.documentElement.getAttribute('data-theme') === 'dark';
   const tickColor = isDark ? '#7B9DC0' : '#64748B';
   const gridColor = isDark ? '#1E2F45' : '#E2E8F0';
+  const azul = isDark ? '#60A5FA' : '#2563EB';
+  const vermelho = isDark ? '#F87171' : '#DC2626';
+  // Só a curva do saldo previsto — os detalhes dia a dia de entradas/saídas
+  // já têm um lugar próprio na aba Previsão, não precisam se repetir aqui.
   chartFluxo = new Chart(document.getElementById('chartFluxo'), {
-    type: 'bar',
-    data: { labels, datasets: [
-      { label: 'Entradas', data: entradas, backgroundColor: 'rgba(22,163,74,0.55)', stack: 'a' },
-      { label: 'Saídas', data: saidas.map(v => -v), backgroundColor: 'rgba(220,38,38,0.55)', stack: 'a' },
-      { label: 'Saldo Acumulado', data: saldoAcum, type: 'line', borderColor: '#2563EB', backgroundColor: 'transparent', pointRadius: 2, tension: 0.3, yAxisID: 'y2', borderWidth: 2 }
-    ]},
+    type: 'line',
+    data: { labels, datasets: [{
+      label: 'Saldo previsto', data: saldoAcum, borderWidth: 2.5, pointRadius: 0, tension: 0.3, fill: 'origin',
+      borderColor: azul, backgroundColor: 'rgba(37,99,235,0.1)',
+      segment: {
+        borderColor: ctx => (ctx.p0.parsed.y < 0 || ctx.p1.parsed.y < 0) ? vermelho : azul,
+        backgroundColor: ctx => (ctx.p0.parsed.y < 0 || ctx.p1.parsed.y < 0) ? 'rgba(220,38,38,0.12)' : 'rgba(37,99,235,0.1)',
+      },
+    }]},
     options: { responsive: true, maintainAspectRatio: false,
-      plugins: { legend: { position: 'bottom', labels: { color: tickColor }}, tooltip: { callbacks: { label: ctx => ctx.dataset.label + ': ' + fmt(Math.abs(ctx.raw)) }}},
+      plugins: { legend: { display: false }, tooltip: { callbacks: { label: ctx => 'Saldo previsto: ' + fmtSgn(ctx.raw) }}},
       scales: {
-        x: { stacked: true, ticks: { maxRotation: 45, font: { size: 10 }, color: tickColor }, grid: { color: gridColor }},
-        y: { stacked: true, ticks: { callback: v => fmt(v), color: tickColor }, grid: { color: gridColor }},
-        y2: { position: 'right', grid: { drawOnChartArea: false }, ticks: { callback: v => fmt(v), color: '#2563EB' }}
+        x: { ticks: { maxRotation: 0, autoSkip: true, maxTicksLimit: 6, font: { size: 10 }, color: tickColor }, grid: { display: false }},
+        y: { ticks: { callback: v => fmt(v), color: tickColor, maxTicksLimit: 5 }, grid: { color: gridColor }}
       }}
   });
 }
