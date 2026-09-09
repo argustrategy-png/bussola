@@ -163,6 +163,12 @@
   .import-step-text { font-size: 0.84rem; color: var(--text2); line-height: 1.6; }
   .import-error { background: var(--red-dim); border: 1px solid rgba(220,38,38,.25); color: var(--red); border-radius: 8px; padding: 12px 16px; font-size: 0.85rem; margin-bottom: 16px; line-height: 1.6; }
   .erp-note { display:flex; gap:10px; align-items:flex-start; background: var(--blue-dim); border: 1px solid rgba(37,99,235,.2); border-radius: 10px; padding: 14px 16px; margin-bottom: 20px; font-size: .84rem; color: var(--text); line-height: 1.6; }
+  .erp-outros { margin: -8px 0 20px; }
+  .erp-outros summary { cursor: pointer; font-size: .84rem; color: var(--accent); font-weight: 600; list-style: none; user-select: none; }
+  .erp-outros summary::-webkit-details-marker { display: none; }
+  .erp-outros summary::before { content: '▸ '; }
+  .erp-outros[open] summary::before { content: '▾ '; }
+  .erp-outros .erp-note { margin-bottom: 12px; }
 
   .filter-row { display: flex; gap: 10px; margin-bottom: 16px; flex-wrap: wrap; align-items: flex-end; }
   .filter-row input, .filter-row select { padding: 7px 10px; border: 1px solid var(--border); border-radius: 6px; font-size: 0.85rem; background: var(--surface); color: var(--text); }
@@ -841,9 +847,13 @@ async function onAuthed(user) {
   sincronizarERPsEmSegundoPlano();
   iniciarSyncPeriodicoERP();
 
+  // Guarda a escolha feita no login (localStorage.meuargus_erp_preferido) pra
+  // sempre — não só nesse primeiro acesso — pra Importar já abrir focada
+  // nesse ERP em vez de listar os 4 igual. O "boas-vindas" (aba + aviso)
+  // continua sendo só uma vez, controlado por uma flag separada.
   const erpPreferido = localStorage.getItem('meuargus_erp_preferido');
-  if (erpPreferido) {
-    localStorage.removeItem('meuargus_erp_preferido');
+  if (erpPreferido && !localStorage.getItem('meuargus_erp_boas_vindas_feita')) {
+    localStorage.setItem('meuargus_erp_boas_vindas_feita', '1');
     showTab('importar');
     showSync(`Você escolheu ${ERP_PROVIDERS[erpPreferido]?.label || erpPreferido} — clique em "Conectar" abaixo.`);
   }
@@ -1964,27 +1974,47 @@ function iniciarSyncPeriodicoERP() {
   erpSyncTimer = setInterval(sincronizarERPsEmSegundoPlano, ERP_SYNC_INTERVAL_MS);
 }
 
+function renderCartaoErp(key, cfg) {
+  const conectado = erpStatusAtual[key];
+  if (conectado) {
+    const syncTxt = conectado.ultima_sincronizacao
+      ? `Última sincronização: ${new Date(conectado.ultima_sincronizacao).toLocaleString('pt-BR')}`
+      : 'Ainda não sincronizado — clique em "Sincronizar agora".';
+    return `<div class="erp-note">🔌 <div>
+      <strong>${cfg.label} conectado.</strong> ${syncTxt}
+      <div style="margin-top:10px;display:flex;gap:10px">
+        <button class="btn btn-primary" onclick="sincronizarERP('${key}')">Sincronizar agora</button>
+        <button class="btn btn-secondary" onclick="desconectarERP('${key}')">Desconectar</button>
+      </div>
+    </div></div>`;
+  }
+  return `<div class="erp-note">🔌 <div>
+    <strong>Conectar ${cfg.label}</strong>
+    <div style="margin-top:10px"><button class="btn btn-primary" onclick="conectarERP('${key}')">Conectar com ${cfg.label}</button></div>
+  </div></div>`;
+}
+
+// A grande maioria dos assinantes usa um ERP só. Em vez de listar os 4 com o
+// mesmo peso, destaca o que já está conectado (ou o que a pessoa escolheu no
+// login) e esconde o resto atrás de "usa outro sistema?" — só quem
+// realmente precisa clica pra ver as outras opções.
 function renderErpLista() {
   const box = document.getElementById('erp-lista');
-  box.innerHTML = Object.entries(ERP_PROVIDERS).map(([key, cfg]) => {
-    const conectado = erpStatusAtual[key];
-    if (conectado) {
-      const syncTxt = conectado.ultima_sincronizacao
-        ? `Última sincronização: ${new Date(conectado.ultima_sincronizacao).toLocaleString('pt-BR')}`
-        : 'Ainda não sincronizado — clique em "Sincronizar agora".';
-      return `<div class="erp-note">🔌 <div>
-        <strong>${cfg.label} conectado.</strong> ${syncTxt}
-        <div style="margin-top:10px;display:flex;gap:10px">
-          <button class="btn btn-primary" onclick="sincronizarERP('${key}')">Sincronizar agora</button>
-          <button class="btn btn-secondary" onclick="desconectarERP('${key}')">Desconectar</button>
-        </div>
-      </div></div>`;
-    }
-    return `<div class="erp-note">🔌 <div>
-      <strong>Conectar ${cfg.label}</strong>
-      <div style="margin-top:10px"><button class="btn btn-primary" onclick="conectarERP('${key}')">Conectar com ${cfg.label}</button></div>
-    </div></div>`;
-  }).join('');
+  const conectadoKey = Object.keys(erpStatusAtual)[0] || null;
+  const preferido = localStorage.getItem('meuargus_erp_preferido');
+  const destaqueKey = conectadoKey || (preferido && ERP_PROVIDERS[preferido] ? preferido : null);
+
+  if (!destaqueKey) {
+    box.innerHTML = Object.entries(ERP_PROVIDERS).map(([key, cfg]) => renderCartaoErp(key, cfg)).join('');
+    return;
+  }
+
+  const outros = Object.entries(ERP_PROVIDERS).filter(([key]) => key !== destaqueKey);
+  box.innerHTML = renderCartaoErp(destaqueKey, ERP_PROVIDERS[destaqueKey]) + `
+    <details class="erp-outros">
+      <summary>Usa outro sistema, ou quer trocar?</summary>
+      <div style="margin-top:12px">${outros.map(([key, cfg]) => renderCartaoErp(key, cfg)).join('')}</div>
+    </details>`;
 }
 
 async function sincronizarERP(provider) {
