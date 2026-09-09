@@ -204,6 +204,9 @@
   .modal-body { padding: 20px 22px; }
   .modal-footer { padding: 14px 22px; border-top: 1px solid var(--border); display: flex; gap: 10px; justify-content: flex-end; }
   .form-field { display: flex; flex-direction: column; gap: 6px; margin-bottom: 14px; }
+  .conta-secao { margin-bottom: 22px; padding-bottom: 22px; border-bottom: 1px solid var(--border); }
+  .conta-secao:last-child { margin-bottom: 0; padding-bottom: 0; border-bottom: none; }
+  .conta-secao-titulo { font-weight: 700; font-size: .78rem; text-transform: uppercase; letter-spacing: .05em; color: var(--text2); margin-bottom: 12px; }
   .form-field label { font-size: .72rem; color: var(--text2); text-transform: uppercase; letter-spacing: .06em; }
   .form-field input { padding: 9px 12px; border: 1px solid var(--border); border-radius: 7px; background: var(--surface2); color: var(--text); font-size: .9rem; font-family: 'Inter', sans-serif; }
   .form-field input:focus { outline: none; border-color: var(--accent); }
@@ -324,7 +327,7 @@
     <span id="hd-trial-badge" class="trial-badge" style="display:none"></span>
     <span style="font-size:.78rem;color:var(--text2)">Logado como <strong id="hd-email" style="color:var(--text)"></strong></span>
     <button class="theme-toggle" onclick="toggleTheme()" id="theme-toggle-app">🌙</button>
-    <button class="theme-toggle" onclick="abrirModalAssinatura()" id="btn-config" title="Assinatura e pagamento">⚙️</button>
+    <button class="theme-toggle" onclick="abrirModalAssinatura()" id="btn-config" title="Minha conta">⚙️</button>
     <button class="btn-logout" onclick="doLogout()">Sair</button>
   </div>
 </header>
@@ -645,16 +648,45 @@
      assinante) — fica fora de qualquer aba porque a engrenagem que abre ele está no
      cabeçalho, acessível de qualquer tela. -->
 <div class="modal-bg" id="modal-assinatura">
-  <div class="modal">
+  <div class="modal" style="max-width:460px">
     <div class="modal-header">
-      <h2>Assinatura</h2>
+      <h2>Minha Conta</h2>
       <button class="modal-close" onclick="fecharModalAssinatura()">✕</button>
     </div>
-    <div class="modal-body">
-      <div id="assinatura-status" style="font-size:.9rem;color:var(--text2);margin-bottom:18px;line-height:1.6"></div>
-      <div id="assinatura-error" style="display:none;color:var(--red);font-size:.85rem;margin-bottom:12px"></div>
-      <button class="btn btn-primary" style="width:100%" id="btn-assinar-agora" onclick="assinarAgoraModal()">Assinar agora</button>
-      <button class="btn btn-secondary" style="width:100%;margin-top:10px" id="btn-portal-stripe" onclick="abrirPortalStripe()">Alterar forma de pagamento</button>
+    <div class="modal-body" style="max-height:72vh;overflow-y:auto">
+
+      <div class="conta-secao">
+        <div class="conta-secao-titulo">Assinatura</div>
+        <div id="assinatura-status" style="font-size:.9rem;color:var(--text2);margin-bottom:14px;line-height:1.6"></div>
+        <div id="assinatura-error" style="display:none;color:var(--red);font-size:.85rem;margin-bottom:12px"></div>
+        <button class="btn btn-primary" style="width:100%" id="btn-assinar-agora" onclick="assinarAgoraModal()">Assinar agora</button>
+        <button class="btn btn-secondary" style="width:100%;margin-top:10px" id="btn-portal-stripe" onclick="abrirPortalStripe()">Alterar forma de pagamento</button>
+      </div>
+
+      <div class="conta-secao">
+        <div class="conta-secao-titulo">Dados pessoais</div>
+        <div class="form-field"><label>Nome</label><input id="conta-nome" type="text"></div>
+        <div class="form-field"><label>Empresa</label><input id="conta-empresa" type="text"></div>
+        <div class="form-field"><label>Telefone</label><input id="conta-telefone" type="text" placeholder="(11) 99999-9999"></div>
+        <div id="conta-dados-msg" style="display:none;font-size:.82rem;margin-bottom:10px"></div>
+        <button class="btn btn-secondary" style="width:100%" onclick="salvarDadosPessoais()">Salvar dados</button>
+      </div>
+
+      <div class="conta-secao">
+        <div class="conta-secao-titulo">Trocar e-mail</div>
+        <div class="form-field"><label>Novo e-mail</label><input id="conta-novo-email" type="email" placeholder="seu@email.com"></div>
+        <div id="conta-email-msg" style="display:none;font-size:.82rem;margin-bottom:10px"></div>
+        <button class="btn btn-secondary" style="width:100%" onclick="salvarNovoEmail()">Trocar e-mail</button>
+      </div>
+
+      <div class="conta-secao">
+        <div class="conta-secao-titulo">Trocar senha</div>
+        <div class="form-field"><label>Nova senha</label><input id="conta-nova-senha" type="password" placeholder="Mínimo 8 caracteres"></div>
+        <div class="form-field"><label>Confirmar nova senha</label><input id="conta-confirma-senha" type="password"></div>
+        <div id="conta-senha-msg" style="display:none;font-size:.82rem;margin-bottom:10px"></div>
+        <button class="btn btn-secondary" style="width:100%" onclick="salvarNovaSenhaConta()">Trocar senha</button>
+      </div>
+
     </div>
     <div class="modal-footer">
       <button class="btn btn-secondary" onclick="fecharModalAssinatura()">Fechar</button>
@@ -952,9 +984,60 @@ function abrirModalAssinatura() {
     btnAssinar.style.display = 'block'; btnAssinar.disabled = false; btnAssinar.textContent = 'Assinar agora';
     btnPortal.style.display = 'none';
   }
+
+  carregarDadosPessoais();
+  document.getElementById('conta-novo-email').value = '';
+  document.getElementById('conta-nova-senha').value = '';
+  document.getElementById('conta-confirma-senha').value = '';
+  ['conta-dados-msg', 'conta-email-msg', 'conta-senha-msg'].forEach(id => { document.getElementById(id).style.display = 'none'; });
+
   document.getElementById('modal-assinatura').classList.add('open');
 }
 function fecharModalAssinatura() { document.getElementById('modal-assinatura').classList.remove('open'); }
+
+async function carregarDadosPessoais() {
+  const { data } = await sb.from('subscribers').select('nome,empresa,tel').eq('id', currentUser.id).single();
+  document.getElementById('conta-nome').value = data?.nome || '';
+  document.getElementById('conta-empresa').value = data?.empresa || '';
+  document.getElementById('conta-telefone').value = data?.tel || '';
+}
+
+function mostrarMsgConta(id, texto, ehErro) {
+  const el = document.getElementById(id);
+  el.textContent = texto;
+  el.style.color = ehErro ? 'var(--red)' : 'var(--green)';
+  el.style.display = 'block';
+}
+
+async function salvarDadosPessoais() {
+  const nome = document.getElementById('conta-nome').value.trim();
+  const empresa = document.getElementById('conta-empresa').value.trim();
+  const tel = document.getElementById('conta-telefone').value.trim();
+  if (!nome) { mostrarMsgConta('conta-dados-msg', 'Informe seu nome.', true); return; }
+  const { error } = await sb.from('subscribers').update({ nome, empresa: empresa || null, tel: tel || null }).eq('id', currentUser.id);
+  if (error) mostrarMsgConta('conta-dados-msg', 'Não consegui salvar. Tente de novo.', true);
+  else mostrarMsgConta('conta-dados-msg', 'Dados salvos ✓', false);
+}
+
+async function salvarNovoEmail() {
+  const email = document.getElementById('conta-novo-email').value.trim();
+  if (!email) { mostrarMsgConta('conta-email-msg', 'Informe o novo e-mail.', true); return; }
+  const { error } = await sb.auth.updateUser({ email });
+  if (error) mostrarMsgConta('conta-email-msg', error.message, true);
+  else mostrarMsgConta('conta-email-msg', `Enviamos um link de confirmação pra ${email}. A troca só vale depois de confirmar.`, false);
+}
+
+async function salvarNovaSenhaConta() {
+  const nova = document.getElementById('conta-nova-senha').value;
+  const confirma = document.getElementById('conta-confirma-senha').value;
+  if (nova.length < 8) { mostrarMsgConta('conta-senha-msg', 'A senha deve ter pelo menos 8 caracteres.', true); return; }
+  if (nova !== confirma) { mostrarMsgConta('conta-senha-msg', 'As senhas não coincidem.', true); return; }
+  const { error } = await sb.auth.updateUser({ password: nova });
+  if (error) { mostrarMsgConta('conta-senha-msg', error.message, true); return; }
+  mostrarMsgConta('conta-senha-msg', 'Senha alterada ✓', false);
+  document.getElementById('conta-nova-senha').value = '';
+  document.getElementById('conta-confirma-senha').value = '';
+}
 
 async function assinarAgoraModal() {
   await iniciarCheckout(document.getElementById('btn-assinar-agora'), document.getElementById('assinatura-error'), 'Assinar agora');
@@ -1947,10 +2030,10 @@ async function checkErpStatus() {
 }
 
 // Mantém os lançamentos do ERP em dia sem depender do usuário lembrar de
-// clicar em "Sincronizar agora": ao abrir o app, e depois a cada 10 minutos,
+// clicar em "Sincronizar agora": ao abrir o app, e depois a cada 1 hora,
 // sincroniza (sem toast, sem barulho) quem estiver conectado e desatualizado.
 // Só roda com a aba em primeiro plano, pra não gastar chamada à API à toa.
-const ERP_SYNC_INTERVAL_MS = 10 * 60 * 1000;
+const ERP_SYNC_INTERVAL_MS = 60 * 60 * 1000;
 async function sincronizarERPsEmSegundoPlano() {
   if (document.visibilityState !== 'visible') return;
   await checkErpStatus();
