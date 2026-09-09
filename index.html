@@ -165,6 +165,7 @@
   .erp-note { display:flex; gap:10px; align-items:flex-start; background: var(--blue-dim); border: 1px solid rgba(37,99,235,.2); border-radius: 10px; padding: 14px 16px; margin-bottom: 20px; font-size: .84rem; color: var(--text); line-height: 1.6; }
   .erp-outros { margin: -8px 0 20px; }
   .erp-outros summary { cursor: pointer; font-size: .84rem; color: var(--accent); font-weight: 600; list-style: none; user-select: none; }
+  .erp-fale-conosco { color: var(--text2); font-weight: 500; text-decoration: underline; margin-left: 8px; }
   .erp-outros summary::-webkit-details-marker { display: none; }
   .erp-outros summary::before { content: '▸ '; }
   .erp-outros[open] summary::before { content: '▾ '; }
@@ -2012,7 +2013,7 @@ function renderErpLista() {
   const outros = Object.entries(ERP_PROVIDERS).filter(([key]) => key !== destaqueKey);
   box.innerHTML = renderCartaoErp(destaqueKey, ERP_PROVIDERS[destaqueKey]) + `
     <details class="erp-outros">
-      <summary>Usa outro sistema, ou quer trocar?</summary>
+      <summary>Usa outro sistema, ou quer trocar? <a href="https://wa.me/551152256779?text=${encodeURIComponent('Olá! Preciso de ajuda para conectar meu ERP no MeuArgus.')}" target="_blank" rel="noopener" class="erp-fale-conosco" onclick="event.stopPropagation()">Fale conosco</a></summary>
       <div style="margin-top:12px">${outros.map(([key, cfg]) => renderCartaoErp(key, cfg)).join('')}</div>
     </details>`;
 }
