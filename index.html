@@ -838,7 +838,8 @@ async function onAuthed(user) {
   loadData();
   handleErpRedirectParams();
   handleCheckoutRedirectParams();
-  checkErpStatus();
+  sincronizarERPsEmSegundoPlano();
+  iniciarSyncPeriodicoERP();
 
   const erpPreferido = localStorage.getItem('meuargus_erp_preferido');
   if (erpPreferido) {
@@ -1932,6 +1933,35 @@ async function checkErpStatus() {
     (data.integracoes || []).forEach(i => { erpStatusAtual[i.provider] = i; });
     renderErpLista();
   } catch (e) { /* silencioso: integração é opcional */ }
+}
+
+// Mantém os lançamentos do ERP em dia sem depender do usuário lembrar de
+// clicar em "Sincronizar agora": ao abrir o app, e depois a cada 10 minutos,
+// sincroniza (sem toast, sem barulho) quem estiver conectado e desatualizado.
+// Só roda com a aba em primeiro plano, pra não gastar chamada à API à toa.
+const ERP_SYNC_INTERVAL_MS = 10 * 60 * 1000;
+async function sincronizarERPsEmSegundoPlano() {
+  if (document.visibilityState !== 'visible') return;
+  await checkErpStatus();
+  const agora = Date.now();
+  const pendentes = Object.entries(erpStatusAtual).filter(([, integ]) => {
+    const ultima = integ.ultima_sincronizacao ? new Date(integ.ultima_sincronizacao).getTime() : 0;
+    return agora - ultima >= ERP_SYNC_INTERVAL_MS;
+  });
+  if (!pendentes.length) return;
+  for (const [provider] of pendentes) {
+    try {
+      const resp = await fetch('/api/erp/sync', { method: 'POST', headers: await erpAuthHeader(), body: JSON.stringify({ provider }) });
+      if (resp.ok) await loadData();
+    } catch (e) { console.error('sync automático falhou', provider, e); }
+  }
+  await checkErpStatus();
+}
+
+let erpSyncTimer = null;
+function iniciarSyncPeriodicoERP() {
+  if (erpSyncTimer) clearInterval(erpSyncTimer);
+  erpSyncTimer = setInterval(sincronizarERPsEmSegundoPlano, ERP_SYNC_INTERVAL_MS);
 }
 
 function renderErpLista() {
