@@ -101,6 +101,10 @@
   .gauge-title.crit { color: var(--red); }
   .gauge-title.warn { color: var(--amber); }
   .gauge-title.ok { color: var(--green); }
+  #gauge-meta-arc { transition: stroke-dashoffset 0.7s cubic-bezier(.34,1.4,.64,1); }
+  #gauge-meta-arc.crit { stroke: var(--red); }
+  #gauge-meta-arc.warn { stroke: var(--amber); }
+  #gauge-meta-arc.ok { stroke: var(--green); }
   .gauge-sub { font-size: .88rem; color: var(--text2); line-height: 1.5; }
 
   .insights { display: grid; gap: 10px; margin-bottom: 24px; }
@@ -371,21 +375,11 @@
   </div>
   <div class="section-title">Meta de Vendas do Mês</div>
   <div class="gauge-card">
-    <svg viewBox="0 0 300 165" class="gauge-svg" role="img" aria-label="Medidor de meta de vendas do mês, de longe da meta a meta batida">
-      <path d="M 30 150 A 120 120 0 0 1 90 46.1" fill="none" stroke="var(--red)" stroke-width="26" stroke-linecap="round"/>
-      <path d="M 90 46.1 A 120 120 0 0 1 210 46.1" fill="none" stroke="var(--amber)" stroke-width="26" stroke-linecap="round"/>
-      <path d="M 210 46.1 A 120 120 0 0 1 270 150" fill="none" stroke="var(--green)" stroke-width="26" stroke-linecap="round"/>
-      <g font-size="13" font-weight="700" fill="var(--text)">
-        <text id="gm-tick-0" x="10" y="153" text-anchor="start">—</text>
-        <text id="gm-tick-25" x="51" y="54" text-anchor="middle">—</text>
-        <text id="gm-tick-50" x="150" y="20" text-anchor="middle">—</text>
-        <text id="gm-tick-75" x="249" y="54" text-anchor="middle">—</text>
-        <text id="gm-tick-100" x="290" y="153" text-anchor="end">—</text>
-      </g>
-      <g id="gauge-meta-needle-group" style="transform-origin:150px 150px">
-        <line x1="150" y1="150" x2="150" y2="42" stroke="var(--text)" stroke-width="4" stroke-linecap="round"/>
-      </g>
-      <circle cx="150" cy="150" r="10" fill="var(--text)"/>
+    <svg viewBox="0 0 300 195" class="gauge-svg" role="img" aria-label="Arco de progresso da meta de vendas do mês, de zero até a meta batida">
+      <path d="M 30 150 A 120 120 0 0 1 270 150" fill="none" stroke="var(--border)" stroke-width="26" stroke-linecap="round"/>
+      <path id="gauge-meta-arc" d="M 30 150 A 120 120 0 0 1 270 150" fill="none" stroke-width="26" stroke-linecap="round"/>
+      <text id="gm-tick-start" x="30" y="183" font-size="13" font-weight="700" fill="var(--text2)" text-anchor="start">—</text>
+      <text id="gm-tick-end" x="270" y="183" font-size="13" font-weight="700" fill="var(--text2)" text-anchor="end">—</text>
     </svg>
     <div class="gauge-info">
       <div class="gauge-title" id="gauge-meta-title">—</div>
@@ -1308,16 +1302,12 @@ function renderGaugeMeta() {
 
   const fracao = contasMes > 0 ? Math.min(1, Math.max(0, 1 - caixaFaltante / contasMes)) : 1;
 
-  // Escala do mostrador: quanto seria a meta de vendas se nada estivesse
-  // coberto ainda (fracao 0, ponta vermelha) até R$0 (fracao 1, ponta verde) —
-  // o mesmo denominador usado pra calcular metaVendas, então o ponteiro cai
-  // exatamente sobre o valor que os números da régua mostram.
+  // Escala do arco: a ponta esquerda é o pior caso (precisar vender tudo,
+  // nada coberto ainda) e a direita é R$0 (meta já batida) — só os dois
+  // extremos ficam escritos, em vez de uma régua de números colada no traço.
   const metaMaxima = contasMes > 0 ? (margemContrib !== null && margemContrib > 0 ? contasMes / margemContrib : contasMes) : 0;
-  document.getElementById('gm-tick-0').textContent = fmtCompact(metaMaxima);
-  document.getElementById('gm-tick-25').textContent = fmtCompact(metaMaxima * 0.75);
-  document.getElementById('gm-tick-50').textContent = fmtCompact(metaMaxima * 0.5);
-  document.getElementById('gm-tick-75').textContent = fmtCompact(metaMaxima * 0.25);
-  document.getElementById('gm-tick-100').textContent = fmtCompact(0);
+  document.getElementById('gm-tick-start').textContent = fmtCompact(metaMaxima);
+  document.getElementById('gm-tick-end').textContent = fmtCompact(0);
 
   let titulo, sub, classe;
 
@@ -1341,8 +1331,11 @@ function renderGaugeMeta() {
     classe = fracao < 0.34 ? 'crit' : 'warn';
   }
 
-  const anguloGraus = (fracao - 0.5) * 180;
-  document.getElementById('gauge-meta-needle-group').style.transform = `rotate(${anguloGraus}deg)`;
+  const arcoEl = document.getElementById('gauge-meta-arc');
+  const comprimento = arcoEl.getTotalLength();
+  arcoEl.style.strokeDasharray = `${comprimento} ${comprimento}`;
+  arcoEl.style.strokeDashoffset = `${comprimento * (1 - fracao)}`;
+  arcoEl.setAttribute('class', classe);
   const tituloEl = document.getElementById('gauge-meta-title');
   tituloEl.textContent = titulo;
   tituloEl.className = 'gauge-title ' + classe;
