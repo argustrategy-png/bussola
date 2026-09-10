@@ -274,6 +274,7 @@
         <button type="button" class="erp-pick-btn" data-erp="omie" onclick="escolherErpAuth('omie')">🟢 Omie</button>
         <button type="button" class="erp-pick-btn" data-erp="contaazul" onclick="escolherErpAuth('contaazul')">🔷 Conta Azul</button>
         <button type="button" class="erp-pick-btn" data-erp="quickbooks" onclick="escolherErpAuth('quickbooks')">🟩 QuickBooks</button>
+        <button type="button" class="erp-pick-btn" data-erp="odoo" onclick="escolherErpAuth('odoo')">🟣 Odoo</button>
         <button type="button" class="erp-pick-btn" data-erp="" onclick="escolherErpAuth('')">Nenhum por enquanto</button>
       </div>
     </div>
@@ -602,8 +603,7 @@
         <button class="modal-close" onclick="closeApiKeyModal()">✕</button>
       </div>
       <div class="modal-body">
-        <div class="form-field"><label>App Key</label><input id="apikey-key" type="text"></div>
-        <div class="form-field"><label>App Secret</label><input id="apikey-secret" type="password"></div>
+        <div id="apikey-fields"></div>
         <div id="apikey-error" style="display:none;color:var(--red);font-size:.85rem"></div>
       </div>
       <div class="modal-footer">
@@ -2152,7 +2152,16 @@ const ERP_PROVIDERS = {
   bling:      { label: 'Bling',      authType: 'oauth2', clientId: '2e668bfee063e06f76a1b648a71b94339b3f6b92', authorizeUrl: 'https://www.bling.com.br/Api/v3/oauth/authorize' },
   contaazul:  { label: 'Conta Azul', authType: 'oauth2', clientId: null, authorizeUrl: 'https://api.contaazul.com/auth/authorize' },
   quickbooks: { label: 'QuickBooks', authType: 'oauth2', clientId: null, authorizeUrl: 'https://appcenter.intuit.com/connect/oauth2' },
-  omie:       { label: 'Omie',       authType: 'apikey' },
+  omie:       { label: 'Omie',       authType: 'apikey', credentialFields: [
+    { name: 'appKey', label: 'App Key', type: 'text' },
+    { name: 'appSecret', label: 'App Secret', type: 'password' },
+  ]},
+  odoo:       { label: 'Odoo',       authType: 'apikey', credentialFields: [
+    { name: 'url', label: 'URL da instância', type: 'text', placeholder: 'https://suaempresa.odoo.com' },
+    { name: 'db', label: 'Banco de dados', type: 'text' },
+    { name: 'username', label: 'Usuário (e-mail)', type: 'text' },
+    { name: 'apiKey', label: 'API Key', type: 'password' },
+  ]},
 };
 let erpStatusAtual = {};
 let apikeyProviderAtual = null;
@@ -2273,28 +2282,35 @@ async function desconectarERP(provider) {
 function openApiKeyModal(provider) {
   apikeyProviderAtual = provider;
   document.getElementById('apikey-titulo').textContent = 'Conectar ' + ERP_PROVIDERS[provider].label;
-  document.getElementById('apikey-key').value = '';
-  document.getElementById('apikey-secret').value = '';
+  const campos = ERP_PROVIDERS[provider].credentialFields || [];
+  document.getElementById('apikey-fields').innerHTML = campos.map(c =>
+    `<div class="form-field"><label>${c.label}</label><input id="apikey-field-${c.name}" type="${c.type || 'text'}" placeholder="${c.placeholder || ''}"></div>`
+  ).join('');
   document.getElementById('apikey-error').style.display = 'none';
   document.getElementById('modal-apikey').classList.add('open');
 }
 function closeApiKeyModal() { document.getElementById('modal-apikey').classList.remove('open'); }
 
 async function confirmarApiKey() {
-  const appKey = document.getElementById('apikey-key').value.trim();
-  const appSecret = document.getElementById('apikey-secret').value.trim();
+  const campos = ERP_PROVIDERS[apikeyProviderAtual].credentialFields || [];
   const err = document.getElementById('apikey-error');
   err.style.display = 'none';
-  if (!appKey || !appSecret) { err.textContent = 'Preencha os dois campos.'; err.style.display = 'block'; return; }
+  const valores = {};
+  campos.forEach(c => { valores[c.name] = document.getElementById(`apikey-field-${c.name}`).value.trim(); });
+  if (campos.some(c => !valores[c.name])) {
+    err.textContent = 'Preencha todos os campos.';
+    err.style.display = 'block';
+    return;
+  }
   const resp = await fetch('/api/erp/connect-apikey', {
     method: 'POST', headers: await erpAuthHeader(),
-    body: JSON.stringify({ provider: apikeyProviderAtual, appKey, appSecret }),
+    body: JSON.stringify({ provider: apikeyProviderAtual, ...valores }),
   });
   const data = await resp.json();
   if (!resp.ok) {
     err.textContent = data.error === 'ja_conectado_em_outra_conta'
       ? 'Essa conta já está conectada em outra conta MeuArgus.'
-      : 'Não foi possível conectar — confira a App Key e o App Secret.';
+      : 'Não foi possível conectar — confira os dados informados.';
     err.style.display = 'block';
     return;
   }

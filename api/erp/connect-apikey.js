@@ -1,5 +1,7 @@
-// POST /api/erp/connect-apikey  { provider: 'omie', appKey: '...', appSecret: '...' }
-// Para ERPs sem OAuth2 (hoje: Omie) — valida as credenciais e salva.
+// POST /api/erp/connect-apikey  { provider: 'omie'|'odoo', ...credenciais }
+// Para ERPs sem OAuth2 — valida as credenciais e salva. Os campos aceitos
+// variam por provider (ver `credentialFields` em cada arquivo de
+// api/_lib/providers/): Omie usa appKey/appSecret, Odoo usa url/db/username/apiKey.
 
 import { getProvider } from '../_lib/providers/index.js';
 import {
@@ -16,7 +18,7 @@ export default async function handler(req, res) {
   const subscriberId = await getAuthenticatedSubscriber(req);
   if (!subscriberId) return res.status(401).json({ error: 'não autenticado' });
 
-  const { provider: providerName, appKey, appSecret } = req.body || {};
+  const { provider: providerName, ...credentials } = req.body || {};
   let provider;
   try {
     provider = getProvider(providerName);
@@ -24,10 +26,15 @@ export default async function handler(req, res) {
     return res.status(400).json({ error: 'provider_desconhecido' });
   }
   if (provider.authType !== 'apikey') return res.status(400).json({ error: 'provider_nao_usa_apikey' });
-  if (!appKey || !appSecret) return res.status(400).json({ error: 'appKey e appSecret obrigatórios' });
+
+  const campos = provider.credentialFields || [];
+  const faltando = campos.filter((c) => !String(credentials[c.name] || '').trim());
+  if (faltando.length) {
+    return res.status(400).json({ error: 'campos_obrigatorios', detail: faltando.map((c) => c.label).join(', ') });
+  }
 
   try {
-    const erpAccountId = await provider.fetchAccountId({ appKey, appSecret });
+    const erpAccountId = await provider.fetchAccountId(credentials);
 
     if (await erpAccountJaConectadoEmOutraConta(providerName, erpAccountId, subscriberId)) {
       return res.status(409).json({ error: 'ja_conectado_em_outra_conta' });
@@ -36,8 +43,9 @@ export default async function handler(req, res) {
     const upsertResp = await upsertIntegracao({
       subscriber_id: subscriberId,
       provider: providerName,
-      access_token: appKey,
-      refresh_token: appSecret,
+      access_token: null,
+      refresh_token: null,
+      credentials,
       expires_at: NUNCA_EXPIRA,
       erp_account_id: erpAccountId,
     });

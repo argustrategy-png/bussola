@@ -41,12 +41,13 @@ export default async function handler(req, res) {
       integracao = { ...integracao, access_token: refreshed.accessToken };
     }
 
-    const ctx = {
-      accessToken: integracao.access_token,
-      appKey: integracao.access_token, // para providers apikey, access_token guarda a App Key
-      appSecret: integracao.refresh_token, // e refresh_token guarda a App Secret
-      realmId: integracao.erp_account_id,
-    };
+    // OAuth2 usa accessToken/realmId; apikey usa os campos declarados em
+    // provider.credentialFields, guardados em `credentials` (jsonb). Uma
+    // integração Omie antiga (de antes dessa coluna existir) ainda guarda
+    // appKey/appSecret em access_token/refresh_token — cai no fallback abaixo.
+    const ctx = provider.authType === 'oauth2'
+      ? { accessToken: integracao.access_token, realmId: integracao.erp_account_id }
+      : (integracao.credentials || { appKey: integracao.access_token, appSecret: integracao.refresh_token });
 
     const [pagar, receber] = await Promise.all([
       provider.fetchContas({ ...ctx, tipo: 'pagar' }),

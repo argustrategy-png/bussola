@@ -25,6 +25,10 @@ export const omie = {
   name: 'omie',
   label: 'Omie',
   authType: 'apikey',
+  credentialFields: [
+    { name: 'appKey', label: 'App Key' },
+    { name: 'appSecret', label: 'App Secret' },
+  ],
 
   // Confirma que App Key/Secret são válidos e retorna um identificador estável
   // da conta (CNPJ da empresa) pra travar 1 Omie = 1 conta MeuArgus.

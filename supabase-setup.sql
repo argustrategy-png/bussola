@@ -115,15 +115,18 @@ create policy "lancamentos_delete_own" on public.lancamentos
   for delete using (auth.uid() = subscriber_id);
 
 -- ── 5b. INTEGRAÇÕES COM ERP (tokens — só o backend acessa) ─────
--- provider: 'bling' funciona hoje; 'contaazul'/'quickbooks'/'omie' são
--- adaptadores de referência em api/_lib/providers/, aguardando credenciais
--- (ver comentários em cada arquivo).
+-- provider: 'bling' funciona hoje; 'contaazul'/'quickbooks' são adaptadores
+-- de referência aguardando credenciais (ver comentários em cada arquivo em
+-- api/_lib/providers/); 'omie' e 'odoo' são apikey (sem OAuth2) — credenciais
+-- ficam em `credentials` (jsonb); access_token/refresh_token só existem por
+-- compatibilidade com integrações Omie antigas gravadas antes dessa coluna.
 create table if not exists public.integracoes_erp (
   id             uuid primary key default gen_random_uuid(),
   subscriber_id  uuid not null references public.subscribers(id) on delete cascade,
-  provider       text not null check (provider in ('bling','contaazul','quickbooks','omie')),
-  access_token   text not null, -- para providers 'apikey' (Omie), guarda a App Key
-  refresh_token  text not null, -- para providers 'apikey' (Omie), guarda o App Secret
+  provider       text not null check (provider in ('bling','contaazul','quickbooks','omie','odoo')),
+  access_token   text, -- OAuth2: token de acesso. Omie legado: guardava a App Key aqui.
+  refresh_token  text, -- OAuth2: token de renovação. Omie legado: guardava o App Secret aqui.
+  credentials    jsonb, -- providers 'apikey' (Omie, Odoo): { appKey, appSecret } ou { url, db, username, apiKey }
   expires_at     timestamptz not null,
   ultima_sincronizacao timestamptz,
   erp_account_id text, -- identificador da conta no ERP (CNPJ no Bling, realmId no QuickBooks...)
