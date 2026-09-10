@@ -2104,6 +2104,42 @@ async function downloadTemplate() {
     const larguras = [12, 48, 14, 14, 18, 26, 16];
     larguras.forEach((w, i) => sheet.column(i + 1).width(w));
 
+    // Dropdowns nas colunas Tipo, Categoria e Fixo/Variável — as opções de
+    // categoria são as mesmas sugeridas no formulário de Lançamentos
+    // (CATEGORIAS_PADRAO), somadas às que já aparecem no checklist acima,
+    // pra ficar tudo consistente entre planilha e app. As listas moram numa
+    // aba oculta em vez de embutidas na fórmula porque o Excel trunca listas
+    // inline com mais de ~255 caracteres.
+    const categoriasChecklist = checklist.map(item => item[2]);
+    const listaTipo = ['Pagar', 'Receber'];
+    const listaCategoria = [...new Set([...CATEGORIAS_PADRAO.pagar, ...CATEGORIAS_PADRAO.receber, ...categoriasChecklist, 'Mercadoria'])];
+    const listaToc = ['Fixo', 'Variável'];
+
+    const listasSheet = workbook.addSheet('Listas');
+    listaCategoria.forEach((c, i) => listasSheet.cell(i + 1, 1).value(c));
+    listaTipo.forEach((t, i) => listasSheet.cell(i + 1, 2).value(t));
+    listaToc.forEach((t, i) => listasSheet.cell(i + 1, 3).value(t));
+    listasSheet.hidden(true);
+
+    // xlsx-populate grava qualquer propriedade não informada como o texto
+    // literal "undefined" no XML — por isso todo campo opcional do objeto
+    // de validação vai explícito aqui, mesmo repetindo o valor padrão.
+    const validacaoEstrita = ref => ({
+      type: 'list', allowBlank: true, formula1: ref, operator: 'between',
+      showInputMessage: false, prompt: '', promptTitle: '',
+      showErrorMessage: true, errorTitle: 'Valor inválido', error: 'Escolha um valor da listinha ao lado da célula.',
+    });
+    // Categoria é só sugestão, não uma lista fechada — o usuário pode digitar
+    // o nome que quiser, então não bloqueia com mensagem de erro.
+    const validacaoSugestao = ref => ({
+      type: 'list', allowBlank: true, formula1: ref, operator: 'between',
+      showInputMessage: false, prompt: '', promptTitle: '',
+      showErrorMessage: false, errorTitle: '', error: '',
+    });
+    sheet.range(3, 1, ultimaLinha, 1).dataValidation(validacaoEstrita(`Listas!$B$1:$B$${listaTipo.length}`));
+    sheet.range(3, 5, ultimaLinha, 5).dataValidation(validacaoSugestao(`Listas!$A$1:$A$${listaCategoria.length}`));
+    sheet.range(3, 7, ultimaLinha, 7).dataValidation(validacaoEstrita(`Listas!$C$1:$C$${listaToc.length}`));
+
     const blob = await workbook.outputAsync();
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
