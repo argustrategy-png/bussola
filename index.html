@@ -454,7 +454,8 @@
       <input id="f-venc" type="date">
     </label>
     <label>Categoria
-      <input id="f-cat" type="text" placeholder="Ex: Aluguel, Vendas...">
+      <input id="f-cat" type="text" placeholder="Ex: Aluguel, Vendas..." list="f-cat-list">
+      <datalist id="f-cat-list"></datalist>
     </label>
     <label id="contraparte-label">Cliente
       <input id="f-contraparte" type="text" placeholder="Nome do cliente">
@@ -1606,6 +1607,23 @@ function toggleTocClass() {
   const cpLabel = document.getElementById('contraparte-label');
   cpLabel.childNodes[0].textContent = isPagar ? 'Fornecedor' : 'Cliente';
   document.getElementById('f-contraparte').placeholder = isPagar ? 'Nome do fornecedor' : 'Nome do cliente';
+  atualizarSugestoesCategoria();
+}
+
+// Sugestões de categoria pro campo "Categoria": uma lista padrão pra cada
+// tipo de lançamento, somada às categorias que o usuário já usou (digitadas
+// ou vindas do ERP), pra régua ficar mais útil com o tempo sem exigir cadastro prévio.
+const CATEGORIAS_PADRAO = {
+  pagar: ['Aluguel', 'Fornecedores', 'Salários', 'Pró-labore', 'Impostos', 'Energia elétrica', 'Água', 'Internet/Telefone', 'Marketing', 'Frete', 'Manutenção', 'Material de escritório', 'Software/Assinaturas', 'Combustível', 'Empréstimos/Financiamento'],
+  receber: ['Vendas', 'Serviços prestados', 'Mensalidade', 'Comissão', 'Juros recebidos', 'Reembolso'],
+};
+
+function atualizarSugestoesCategoria() {
+  const tipo = document.getElementById('f-tipo').value;
+  const usadas = data.filter(r => r.tipo === tipo && r.categoria).map(r => r.categoria);
+  const lista = [...new Set([...CATEGORIAS_PADRAO[tipo], ...usadas])];
+  const esc = s => s.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;');
+  document.getElementById('f-cat-list').innerHTML = lista.map(c => `<option value="${esc(c)}">`).join('');
 }
 
 async function addLancamento() {
@@ -2289,6 +2307,7 @@ initAuth();
 function refreshAll() {
   renderDashboard();
   renderTable();
+  atualizarSugestoesCategoria();
   if (document.getElementById('tab-indicadores').classList.contains('active')) renderIndicadores();
   if (document.getElementById('tab-cobranca').classList.contains('active')) renderCobranca();
   if (document.getElementById('tab-insights').classList.contains('active')) renderInsights();
