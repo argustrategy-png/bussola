@@ -411,9 +411,12 @@
     <label>Taxa média do cartão (% a.m.)
       <input type="number" step="0.01" id="p-cartao" placeholder="Ex: 3,50" oninput="saveParams();renderIndicadores();renderInsights()">
     </label>
+    <label>Margem de contribuição (%)
+      <input type="number" step="0.1" id="p-margem" placeholder="Deixe em branco pra calcular automático" oninput="saveParams();renderDashboard()">
+    </label>
   </div>
   <div class="param-row" style="margin-top:-14px">
-    <span class="hint">Ajuste conforme sua realidade — a Selic e a taxa de cartão mudam com o tempo, então mantenha atualizado para insights precisos.</span>
+    <span class="hint">Ajuste conforme sua realidade — a Selic e a taxa de cartão mudam com o tempo, então mantenha atualizado para insights precisos. A margem de contribuição é usada na Meta de Vendas do Painel; deixe em branco pra calcular sozinho pela receita e custo variável já pagos.</span>
   </div>
 
   <div class="section-title">Rentabilidade</div>
@@ -751,7 +754,7 @@ function toggleTheme() {
 
 // ─── STATE ───────────────────────────────────────────────
 let data = [];
-let paramsState = JSON.parse(localStorage.getItem('meuargus_params') || '{"selic":10.75,"cartao":3.5}');
+let paramsState = JSON.parse(localStorage.getItem('meuargus_params') || '{"selic":10.75,"cartao":3.5,"margem":null}');
 const TEMPLATES_PADRAO = {
   lembrete: 'Olá {cliente}! Passando para lembrar que sua fatura de {valor} vence em {vencimento}. Qualquer dúvida, estou à disposição!',
   vencimento: 'Olá {cliente}, sua fatura de {valor} vence hoje ({vencimento}). Para evitar juros, garanta o pagamento ainda hoje. Obrigado!',
@@ -1167,6 +1170,8 @@ async function _delete(id) {
 function saveParams() {
   paramsState.selic = parseFloat(document.getElementById('p-selic').value) || 0;
   paramsState.cartao = parseFloat(document.getElementById('p-cartao').value) || 0;
+  const margemInput = document.getElementById('p-margem').value;
+  paramsState.margem = margemInput === '' ? null : parseFloat(margemInput);
   localStorage.setItem('meuargus_params', JSON.stringify(paramsState));
 }
 
@@ -1289,7 +1294,10 @@ function renderGaugeMeta() {
   data.filter(r => r.tipo === 'receber' && r.status !== 'pago' && r.vencimento >= t && r.vencimento <= fimMes).forEach(r => { recebiveisMes += r.valor; });
 
   const caixaFaltante = Math.max(0, contasMes - recebiveisMes - k.saldo);
-  const margemContrib = k.receitasPagas > 0 ? (k.receitasPagas - k.ctvPago) / k.receitasPagas : null;
+  const margemManual = (paramsState.margem !== null && paramsState.margem !== undefined && !isNaN(paramsState.margem)) ? paramsState.margem / 100 : null;
+  const margemCalculada = k.receitasPagas > 0 ? (k.receitasPagas - k.ctvPago) / k.receitasPagas : null;
+  const margemContrib = margemManual !== null ? margemManual : margemCalculada;
+  const margemEhManual = margemManual !== null;
 
   let metaVendas = null;
   if (caixaFaltante > 0) {
@@ -1318,15 +1326,17 @@ function renderGaugeMeta() {
     classe = 'ok';
   } else if (margemContrib !== null && margemContrib <= 0) {
     titulo = '⚠️ Margem de contribuição negativa';
-    sub = `Faltam ${fmt(caixaFaltante)} em caixa pra cobrir as contas do mês, mas os custos variáveis pagos superam a receita paga — reveja preço ou custo variável antes de definir uma meta de vendas.`;
+    sub = margemEhManual
+      ? `Faltam ${fmt(caixaFaltante)} em caixa pra cobrir as contas do mês, mas a margem de contribuição informada (${paramsState.margem}%) é zero ou negativa — revise o valor em Indicadores › Parâmetros de Referência.`
+      : `Faltam ${fmt(caixaFaltante)} em caixa pra cobrir as contas do mês, mas os custos variáveis pagos superam a receita paga — reveja preço ou custo variável antes de definir uma meta de vendas.`;
     classe = 'crit';
   } else if (margemContrib === null) {
     titulo = `🎯 Meta de vendas: pelo menos ${fmt(metaVendas)}`;
-    sub = `Faltam ${fmt(caixaFaltante)} em caixa pra cobrir as contas do mês. Ainda não há receita paga suficiente pra calcular a margem de contribuição, então essa meta é em valor bruto, sem descontar custo variável.`;
+    sub = `Faltam ${fmt(caixaFaltante)} em caixa pra cobrir as contas do mês. Ainda não há receita paga suficiente pra calcular a margem de contribuição, então essa meta é em valor bruto, sem descontar custo variável. Se preferir, informe sua margem em Indicadores › Parâmetros de Referência.`;
     classe = fracao < 0.34 ? 'crit' : 'warn';
   } else {
     titulo = `🎯 Meta de vendas do mês: ${fmt(metaVendas)}`;
-    sub = `Pra cobrir os ${fmt(caixaFaltante)} que faltam em caixa este mês, considerando sua margem de contribuição atual de ${(margemContrib * 100).toFixed(1)}%, você precisa faturar pelo menos esse valor.`;
+    sub = `Pra cobrir os ${fmt(caixaFaltante)} que faltam em caixa este mês, considerando ${margemEhManual ? 'a margem de contribuição que você informou' : 'sua margem de contribuição atual'} de ${(margemContrib * 100).toFixed(1)}%, você precisa faturar pelo menos esse valor.`;
     classe = fracao < 0.34 ? 'crit' : 'warn';
   }
 
@@ -1359,6 +1369,7 @@ function renderAlertas(saldo, recv30, pag30) {
 function calcIndicadores() {
   document.getElementById('p-selic').value = paramsState.selic || '';
   document.getElementById('p-cartao').value = paramsState.cartao || '';
+  document.getElementById('p-margem').value = (paramsState.margem === null || paramsState.margem === undefined) ? '' : paramsState.margem;
 
   const receitasPagas = data.filter(r => r.tipo === 'receber' && r.status === 'pago').reduce((s,r)=>s+r.valor,0);
   const ctvPago = data.filter(r => r.tipo === 'pagar' && r.status === 'pago' && r.toc === 'ctv').reduce((s,r)=>s+r.valor,0);
