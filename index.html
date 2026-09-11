@@ -391,7 +391,7 @@
 <div class="tab" id="tab-indicadores">
   <div class="hero">
     <h2>📈 Indicadores Financeiros</h2>
-    <p>Os números que mostram a saúde real do negócio: quanto sobra, quanto rende e por quanto tempo o caixa aguenta. Referência de mercado: um negócio saudável mantém <strong>margem líquida mínima de 25%</strong>.</p>
+    <p>Os números que mostram a saúde real do negócio: quanto sobra, quanto rende e por quanto tempo o caixa aguenta. Referência ajustável abaixo: meta mínima de margem líquida <strong id="hero-meta-margem">25%</strong> — mude conforme a realidade do seu setor.</p>
   </div>
 
   <div class="section-title">Parâmetros de Referência</div>
@@ -405,14 +405,17 @@
     <label>Margem de contribuição (%)
       <input type="number" step="0.1" id="p-margem" placeholder="Deixe em branco pra calcular automático" oninput="saveParams();renderDashboard()">
     </label>
+    <label>Meta mínima de margem líquida (%)
+      <input type="number" step="0.1" id="p-meta-margem" placeholder="Ex: 25" oninput="saveParams();renderIndicadores();renderInsights()">
+    </label>
   </div>
   <div class="param-row" style="margin-top:-14px">
-    <span class="hint">Ajuste conforme sua realidade — a Selic e a taxa de cartão mudam com o tempo, então mantenha atualizado para insights precisos. A margem de contribuição é usada na Meta de Vendas do Painel; deixe em branco pra calcular sozinho pela receita e custo variável já pagos.</span>
+    <span class="hint">Ajuste conforme sua realidade — a Selic e a taxa de cartão mudam com o tempo, então mantenha atualizado para insights precisos. A margem de contribuição é usada na Meta de Vendas do Painel; deixe em branco pra calcular sozinho pela receita e custo variável já pagos. A meta de margem líquida varia MUITO por setor (varejo costuma ser bem mais baixo que serviço) — 25% é só um ponto de partida genérico, ajuste pro seu ramo.</span>
   </div>
 
   <div class="section-title">Rentabilidade</div>
   <div class="cards">
-    <div class="card" id="k-card-margem"><label>Margem Líquida</label><div class="val" id="k-margem">—</div><div class="sub">Meta mínima: 25%</div></div>
+    <div class="card" id="k-card-margem"><label>Margem Líquida</label><div class="val" id="k-margem">—</div><div class="sub" id="k-margem-meta-sub">Meta mínima: 25%</div></div>
     <div class="card blue"><label>Receita Recebida</label><div class="val" id="k-receita">R$ 0</div><div class="sub">Total já recebido</div></div>
     <div class="card" id="k-card-ll"><label>Lucro Líquido</label><div class="val" id="k-ll">R$ 0</div><div class="sub">Receita − Despesas</div></div>
   </div>
@@ -745,7 +748,8 @@ function toggleTheme() {
 
 // ─── STATE ───────────────────────────────────────────────
 let data = [];
-let paramsState = JSON.parse(localStorage.getItem('meuargus_params') || '{"selic":10.75,"cartao":3.5,"margem":null}');
+let paramsState = JSON.parse(localStorage.getItem('meuargus_params') || '{"selic":10.75,"cartao":3.5,"margem":null,"metaMargem":25}');
+if (paramsState.metaMargem === undefined) paramsState.metaMargem = 25;
 const TEMPLATES_PADRAO = {
   lembrete: 'Olá {cliente}! Passando para lembrar que sua fatura de {valor} vence em {vencimento}. Qualquer dúvida, estou à disposição!',
   vencimento: 'Olá {cliente}, sua fatura de {valor} vence hoje ({vencimento}). Para evitar juros, garanta o pagamento ainda hoje. Obrigado!',
@@ -1163,7 +1167,9 @@ function saveParams() {
   paramsState.cartao = parseFloat(document.getElementById('p-cartao').value) || 0;
   const margemInput = document.getElementById('p-margem').value;
   paramsState.margem = margemInput === '' ? null : parseFloat(margemInput);
+  paramsState.metaMargem = parseFloat(document.getElementById('p-meta-margem').value) || 25;
   localStorage.setItem('meuargus_params', JSON.stringify(paramsState));
+  document.getElementById('hero-meta-margem').textContent = paramsState.metaMargem + '%';
 }
 
 // ─── NAV ─────────────────────────────────────────────────
@@ -1289,7 +1295,14 @@ function renderGaugeMeta() {
 
   const caixaFaltante = Math.max(0, contasMes - recebiveisMes - k.saldo);
   const margemManual = (paramsState.margem !== null && paramsState.margem !== undefined && !isNaN(paramsState.margem)) ? paramsState.margem / 100 : null;
-  const margemCalculada = k.receitasPagas > 0 ? (k.receitasPagas - k.ctvPago) / k.receitasPagas : null;
+  // Só confia no cálculo automático se houver custo variável de fato
+  // classificado (toc='ctv') em algum lançamento pago. Sem isso, ctvPago fica
+  // sempre 0 — e isso não quer dizer "sem custo variável", quer dizer "ninguém
+  // classificou ainda" (é o caso de todo lançamento vindo de ERP: os
+  // conectores gravam 'do' por padrão, ver mapConta em api/_lib/providers/*).
+  // Reportar 100% de margem nesse caso seria enganoso, então cai no mesmo
+  // "sem dados" de quando não há receita paga.
+  const margemCalculada = (k.receitasPagas > 0 && k.ctvPago > 0) ? (k.receitasPagas - k.ctvPago) / k.receitasPagas : null;
   const margemContrib = margemManual !== null ? margemManual : margemCalculada;
   const margemEhManual = margemManual !== null;
 
@@ -1322,7 +1335,9 @@ function renderGaugeMeta() {
     classe = 'crit';
   } else if (margemContrib === null) {
     titulo = `🎯 Meta de vendas: pelo menos ${fmt(metaVendas)}`;
-    sub = `Faltam ${fmt(caixaFaltante)} em caixa pra cobrir as contas do mês. Ainda não há receita paga suficiente pra calcular a margem de contribuição, então essa meta é em valor bruto, sem descontar custo variável. Se preferir, informe sua margem em Indicadores › Parâmetros de Referência.`;
+    sub = k.receitasPagas > 0
+      ? `Faltam ${fmt(caixaFaltante)} em caixa pra cobrir as contas do mês. Nenhuma conta a pagar está classificada como "Variável" ainda (lançamentos de ERP entram como "Fixo" por padrão), então não dá pra calcular a margem de contribuição automaticamente — essa meta é em valor bruto. Classifique alguns custos como Variável na aba Lançamentos, ou informe sua margem direto em Indicadores › Parâmetros de Referência.`
+      : `Faltam ${fmt(caixaFaltante)} em caixa pra cobrir as contas do mês. Ainda não há receita paga suficiente pra calcular a margem de contribuição, então essa meta é em valor bruto, sem descontar custo variável. Se preferir, informe sua margem em Indicadores › Parâmetros de Referência.`;
     classe = fracao < 0.34 ? 'crit' : 'warn';
   } else {
     titulo = `🎯 Meta de vendas do mês: ${fmt(metaVendas)}`;
@@ -1363,6 +1378,8 @@ function calcIndicadores() {
   document.getElementById('p-selic').value = paramsState.selic || '';
   document.getElementById('p-cartao').value = paramsState.cartao || '';
   document.getElementById('p-margem').value = (paramsState.margem === null || paramsState.margem === undefined) ? '' : paramsState.margem;
+  document.getElementById('p-meta-margem').value = paramsState.metaMargem;
+  document.getElementById('hero-meta-margem').textContent = paramsState.metaMargem + '%';
 
   const receitasPagas = data.filter(r => r.tipo === 'receber' && r.status === 'pago').reduce((s,r)=>s+r.valor,0);
   const ctvPago = data.filter(r => r.tipo === 'pagar' && r.status === 'pago' && r.toc === 'ctv').reduce((s,r)=>s+r.valor,0);
@@ -1394,10 +1411,11 @@ function renderIndicadores() {
 
   const margemEl = document.getElementById('k-margem');
   const margemCard = document.getElementById('k-card-margem');
+  document.getElementById('k-margem-meta-sub').textContent = `Meta mínima: ${paramsState.metaMargem}%`;
   if (k.margem === null) { margemEl.textContent = '—'; margemCard.className = 'card'; }
   else {
     margemEl.textContent = k.margem.toFixed(1) + '%';
-    margemCard.className = 'card ' + (k.margem >= 25 ? 'green' : k.margem >= 0 ? 'amber' : 'red');
+    margemCard.className = 'card ' + (k.margem >= paramsState.metaMargem ? 'green' : k.margem >= 0 ? 'amber' : 'red');
   }
 
   const liquidezEl = document.getElementById('k-liquidez');
@@ -1525,10 +1543,10 @@ function renderInsights() {
     cards.push({ icon:'💰', nome:'Agente de Rentabilidade', cls:'warn', msg:'Ainda não há receita recebida suficiente para calcular a margem líquida. Registre e marque como pagos os lançamentos de receita.' });
   } else if (k.margem < 0) {
     cards.push({ icon:'💰', nome:'Agente de Rentabilidade', cls:'bad', msg:`Margem líquida negativa (${k.margem.toFixed(1)}%): as despesas pagas superam a receita recebida. Antes de qualquer outra decisão, é preciso reverter esse quadro — corte custos variáveis ou renegocie despesas fixas.` });
-  } else if (k.margem < 25) {
-    cards.push({ icon:'💰', nome:'Agente de Rentabilidade', cls:'warn', msg:`Margem líquida de ${k.margem.toFixed(1)}%, abaixo da meta mínima de 25% considerada saudável para o negócio. Faltam ${(25-k.margem).toFixed(1)} pontos percentuais — avalie preço, mix de produtos ou custo variável (hoje ${fmt(k.ctvPago)}).` });
+  } else if (k.margem < paramsState.metaMargem) {
+    cards.push({ icon:'💰', nome:'Agente de Rentabilidade', cls:'warn', msg:`Margem líquida de ${k.margem.toFixed(1)}%, abaixo da meta mínima de ${paramsState.metaMargem}% definida para o negócio. Faltam ${(paramsState.metaMargem-k.margem).toFixed(1)} pontos percentuais — avalie preço, mix de produtos ou custo variável (hoje ${fmt(k.ctvPago)}).` });
   } else {
-    cards.push({ icon:'💰', nome:'Agente de Rentabilidade', cls:'ok', msg:`Margem líquida de ${k.margem.toFixed(1)}%, acima da meta mínima de 25%. O negócio está gerando valor de forma saudável — foco agora em manter a disciplina de custos enquanto cresce.` });
+    cards.push({ icon:'💰', nome:'Agente de Rentabilidade', cls:'ok', msg:`Margem líquida de ${k.margem.toFixed(1)}%, acima da meta mínima de ${paramsState.metaMargem}%. O negócio está gerando valor de forma saudável — foco agora em manter a disciplina de custos enquanto cresce.` });
   }
 
   // Agente de Caixa
