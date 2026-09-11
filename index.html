@@ -194,6 +194,8 @@
   .param-row input { padding: 9px 11px; border: 1px solid var(--border); border-radius: 7px; font-size: 0.9rem; width: 190px; background: var(--surface); color: var(--text); }
   .param-row input:focus { outline: none; border-color: var(--accent); }
   .param-row .hint { font-size: .68rem; color: var(--text2); margin-top: 2px; }
+  .label-row { display: inline-flex; align-items: center; gap: 4px; flex-wrap: wrap; }
+  .info-icon { cursor: help; color: var(--text2); font-size: .95em; text-transform: none; letter-spacing: normal; }
 
   .divider { height: 1px; background: var(--border); margin: 20px 0; }
 
@@ -402,10 +404,11 @@
     <label>Taxa média do cartão (% a.m.)
       <input type="number" step="0.01" id="p-cartao" placeholder="Ex: 3,50" oninput="saveParams();renderIndicadores();renderInsights()">
     </label>
-    <label>Margem de contribuição (%)
+    <label><span class="label-row">Margem de contribuição (%) <span class="info-icon" title="Quanto sobra de cada venda depois só do custo variável (matéria-prima, frete, taxa de cartão) — antes das contas fixas. Usada na Meta de Vendas do Painel.">ⓘ</span></span>
       <input type="number" step="0.1" id="p-margem" placeholder="Deixe em branco pra calcular automático" oninput="saveParams();renderDashboard()">
+      <span id="p-margem-aviso" class="hint" style="display:none;color:var(--amber)"></span>
     </label>
-    <label>Meta mínima de margem líquida (%)
+    <label><span class="label-row">Meta mínima de margem líquida (%) <span class="info-icon" title="Quanto deveria sobrar de lucro líquido por real vendido, depois de TODAS as contas (fixas e variáveis). Varia por setor — varejo costuma ser mais baixo que serviço.">ⓘ</span></span>
       <input type="number" step="0.1" id="p-meta-margem" placeholder="Ex: 25" oninput="saveParams();renderIndicadores();renderInsights()">
     </label>
   </div>
@@ -1170,6 +1173,21 @@ function saveParams() {
   paramsState.metaMargem = parseFloat(document.getElementById('p-meta-margem').value) || 25;
   localStorage.setItem('meuargus_params', JSON.stringify(paramsState));
   document.getElementById('hero-meta-margem').textContent = paramsState.metaMargem + '%';
+
+  checkMargemAviso();
+}
+
+// Aviso (não bloqueia) pra margem de contribuição fora da faixa comum — pega
+// o caso de digitar errado (ex: "3" querendo dizer 30%) sem impedir quem
+// realmente tem uma margem atípica de salvar mesmo assim.
+function checkMargemAviso() {
+  const avisoEl = document.getElementById('p-margem-aviso');
+  if (paramsState.margem !== null && !isNaN(paramsState.margem) && (paramsState.margem < 5 || paramsState.margem > 90)) {
+    avisoEl.textContent = `⚠️ ${paramsState.margem}% é uma margem incomum — confira se não é engano (ex: digitou 3 querendo dizer 30).`;
+    avisoEl.style.display = 'block';
+  } else {
+    avisoEl.style.display = 'none';
+  }
 }
 
 // ─── NAV ─────────────────────────────────────────────────
@@ -1379,6 +1397,7 @@ function calcIndicadores() {
   document.getElementById('p-cartao').value = paramsState.cartao || '';
   document.getElementById('p-margem').value = (paramsState.margem === null || paramsState.margem === undefined) ? '' : paramsState.margem;
   document.getElementById('p-meta-margem').value = paramsState.metaMargem;
+  checkMargemAviso();
   document.getElementById('hero-meta-margem').textContent = paramsState.metaMargem + '%';
 
   const receitasPagas = data.filter(r => r.tipo === 'receber' && r.status === 'pago').reduce((s,r)=>s+r.valor,0);
