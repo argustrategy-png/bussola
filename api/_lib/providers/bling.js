@@ -95,4 +95,84 @@ export const bling = {
       erp_id: `bling:${conta.id}`,
     };
   },
+
+  // Posição de estoque: confirmado contra o wrapper open-source
+  // bling-erp-api-js que o /produtos já devolve estoque.saldoVirtualTotal
+  // embutido — não precisa de uma chamada extra em /estoques/saldos.
+  async fetchProdutos({ accessToken }) {
+    // Nota: não filtramos por `situacao` na query — esse parâmetro não foi
+    // confirmado como filtro aceito pelo endpoint (só como campo de
+    // resposta); produtos inativos entram e ficam marcados via `situacao`
+    // no registro salvo, pra UI decidir se esconde.
+    const resp = await fetch(`${API_BASE}/produtos?pagina=1&limite=100`, {
+      headers: { Authorization: `Bearer ${accessToken}`, Accept: 'application/json' },
+    });
+    if (!resp.ok) throw new Error(`Bling /produtos falhou: ${resp.status} ${await resp.text()}`);
+    const json = await resp.json();
+    return json?.data || [];
+  },
+
+  mapProduto(produto, subscriberId) {
+    // `situacao` pode vir como string simples ou como objeto {id,nome} — o
+    // formato exato não foi confirmado, então aceita os dois sem quebrar.
+    const situacao = typeof produto.situacao === 'object' && produto.situacao !== null
+      ? (produto.situacao.nome || produto.situacao.id || null)
+      : (produto.situacao || null);
+    return {
+      subscriber_id: subscriberId,
+      provider: 'bling',
+      erp_id: String(produto.id),
+      nome: produto.nome,
+      codigo: produto.codigo || null,
+      preco: Number(produto.preco) || null,
+      estoque_atual: produto.estoque?.saldoVirtualTotal ?? null,
+      situacao: situacao ? String(situacao) : null,
+    };
+  },
+
+  // Itens vendidos: a listagem de pedidos de venda não traz os itens (só
+  // vem no detalhe por pedido — GET /pedidos/vendas/{id}), então pra saber
+  // "o que" foi vendido é preciso 1 chamada extra por pedido. Limitado aos
+  // últimos 30 dias e no máximo 30 pedidos por sync, em lotes pequenos, pra
+  // não estourar o limite de tempo da function nem o rate limit do Bling.
+  async fetchItensVenda({ accessToken }) {
+    const hoje = new Date();
+    const trintaDiasAtras = new Date(hoje.getTime() - 30 * 24 * 60 * 60 * 1000);
+    const fmt = (d) => d.toISOString().split('T')[0];
+    const listaResp = await fetch(
+      `${API_BASE}/pedidos/vendas?pagina=1&limite=30&dataInicial=${fmt(trintaDiasAtras)}&dataFinal=${fmt(hoje)}`,
+      { headers: { Authorization: `Bearer ${accessToken}`, Accept: 'application/json' } }
+    );
+    if (!listaResp.ok) throw new Error(`Bling /pedidos/vendas falhou: ${listaResp.status} ${await listaResp.text()}`);
+    const pedidos = (await listaResp.json())?.data || [];
+
+    const LOTE = 5;
+    const itensPorPedido = [];
+    for (let i = 0; i < pedidos.length; i += LOTE) {
+      const lote = pedidos.slice(i, i + LOTE);
+      const detalhes = await Promise.all(lote.map(async (p) => {
+        const r = await fetch(`${API_BASE}/pedidos/vendas/${p.id}`, {
+          headers: { Authorization: `Bearer ${accessToken}`, Accept: 'application/json' },
+        });
+        if (!r.ok) return null;
+        const detalhe = (await r.json())?.data;
+        return { pedido: p, itens: detalhe?.itens || [] };
+      }));
+      itensPorPedido.push(...detalhes.filter(Boolean));
+    }
+    return itensPorPedido;
+  },
+
+  mapItemVenda(pedido, item, subscriberId) {
+    return {
+      subscriber_id: subscriberId,
+      provider: 'bling',
+      pedido_erp_id: String(pedido.id),
+      produto_erp_id: item.produto?.id ? String(item.produto.id) : null,
+      produto_nome: item.descricao || `Item #${item.id}`,
+      quantidade: Number(item.quantidade) || 0,
+      valor: Number(item.valor) || 0,
+      data: pedido.data || null,
+    };
+  },
 };

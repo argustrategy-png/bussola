@@ -161,6 +161,12 @@
   .chat-msg { max-width: 75%; padding: 10px 14px; border-radius: 12px; font-size: .92rem; line-height: 1.55; white-space: pre-wrap; }
   .chat-msg-user { align-self: flex-end; background: var(--accent); color: #fff; border-bottom-right-radius: 3px; }
   .chat-msg-assistant { align-self: flex-start; background: var(--surface); border: 1px solid var(--border); border-bottom-left-radius: 3px; }
+  .chat-msg-assistant p { margin: 0 0 8px; }
+  .chat-msg-assistant p:last-child { margin-bottom: 0; }
+  .chat-msg-assistant .chat-heading { font-weight: 700; margin-top: 4px; }
+  .chat-msg-assistant ul { margin: 0 0 8px; padding-left: 20px; }
+  .chat-msg-assistant li { margin-bottom: 4px; }
+  .chat-msg-assistant hr { border: none; border-top: 1px solid var(--border); margin: 10px 0; }
   .chat-msg-pensando { opacity: .6; font-style: italic; }
   .chat-form { display: flex; gap: 10px; }
   .chat-form input { flex: 1; padding: 11px 14px; border: 1px solid var(--border); border-radius: 8px; font-size: .95rem; background: var(--surface); color: var(--text); }
@@ -399,6 +405,21 @@
   </div>
   <div class="section-title">Alertas</div>
   <div class="insights" id="insights-box"></div>
+
+  <div id="estoque-secao" style="display:none">
+    <div class="section-title">Estoque e Vendas (Bling)</div>
+    <div class="cards">
+      <div class="card" id="card-mais-vendido"><label>Mais vendido (30 dias)</label><div class="val" id="v-mais-vendido">—</div><div class="sub" id="v-mais-vendido-qtd">—</div></div>
+      <div class="card"><label>Produtos cadastrados</label><div class="val" id="v-total-produtos">0</div><div class="sub">Sincronizados do ERP</div></div>
+      <div class="card red"><label>Estoque baixo</label><div class="val" id="v-estoque-baixo">0</div><div class="sub">Produtos com 5 unidades ou menos</div></div>
+    </div>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Produto</th><th>Código</th><th>Estoque</th></tr></thead>
+        <tbody id="tabela-estoque-baixo"></tbody>
+      </table>
+    </div>
+  </div>
 </div>
 
 <!-- INDICADORES -->
@@ -775,6 +796,8 @@ function toggleTheme() {
 
 // ─── STATE ───────────────────────────────────────────────
 let data = [];
+let produtosData = [];
+let vendasItensData = [];
 let paramsState = JSON.parse(localStorage.getItem('meuargus_params') || '{"selic":10.75,"cartao":3.5,"margem":null,"metaMargem":25}');
 if (paramsState.metaMargem === undefined) paramsState.metaMargem = 25;
 const TEMPLATES_PADRAO = {
@@ -1163,7 +1186,26 @@ async function loadData() {
   const { data: rows, error } = await sb.from('lancamentos').select('*').order('vencimento', { ascending: true });
   if (error) { showSync('Erro ao carregar dados ✗', true); return; }
   data = rows || [];
+  await loadEstoqueDados();
   refreshAll();
+}
+
+// Estoque e vendas por produto — tabelas separadas de `lancamentos`,
+// preenchidas só pra providers que suportam isso (hoje só Bling). Falha
+// silenciosa: nem toda conta tem essas tabelas povoadas, e isso não deveria
+// travar o resto do painel.
+async function loadEstoqueDados() {
+  try {
+    const [{ data: produtos }, { data: itens }] = await Promise.all([
+      sb.from('produtos').select('*').order('estoque_atual', { ascending: true }),
+      sb.from('vendas_itens').select('*'),
+    ]);
+    produtosData = produtos || [];
+    vendasItensData = itens || [];
+  } catch (e) {
+    produtosData = [];
+    vendasItensData = [];
+  }
 }
 
 async function _insert(item) {
@@ -1262,7 +1304,44 @@ function renderDashboard() {
   renderGaugeCaixa();
   renderGaugeMeta();
   renderAlertas(saldo, recv30, pag30);
+  renderEstoqueSecao();
   document.getElementById('hd-subtitle').textContent = `${data.length} lançamentos · Saldo ${fmt(saldo)}`;
+}
+
+// Estoque e produto mais vendido — só aparece se o ERP conectado sincronizar
+// esses dados (hoje só Bling); pra quem não tem, a seção fica escondida em
+// vez de mostrar zeros sem sentido.
+function renderEstoqueSecao() {
+  const secao = document.getElementById('estoque-secao');
+  if (!produtosData.length) { secao.style.display = 'none'; return; }
+  secao.style.display = 'block';
+
+  document.getElementById('v-total-produtos').textContent = produtosData.length;
+
+  const baixo = produtosData.filter(p => p.estoque_atual !== null && p.estoque_atual <= 5).sort((a, b) => a.estoque_atual - b.estoque_atual);
+  document.getElementById('v-estoque-baixo').textContent = baixo.length;
+  const corBaixo = document.querySelector('#estoque-secao .card.red .val');
+  if (corBaixo) corBaixo.parentElement.className = 'card ' + (baixo.length > 0 ? 'red' : '');
+  document.getElementById('tabela-estoque-baixo').innerHTML = baixo.slice(0, 10).map(p =>
+    `<tr><td>${p.nome}</td><td>${p.codigo || '—'}</td><td>${p.estoque_atual}</td></tr>`
+  ).join('') || '<tr><td colspan="3">Nenhum produto com estoque baixo.</td></tr>';
+
+  const porProduto = {};
+  vendasItensData.forEach(item => {
+    const chave = item.produto_nome;
+    if (!porProduto[chave]) porProduto[chave] = { qtd: 0, valor: 0 };
+    porProduto[chave].qtd += Number(item.quantidade) || 0;
+    porProduto[chave].valor += Number(item.valor) || 0;
+  });
+  const ranking = Object.entries(porProduto).sort((a, b) => b[1].qtd - a[1].qtd);
+  if (ranking.length) {
+    const [nome, info] = ranking[0];
+    document.getElementById('v-mais-vendido').textContent = nome;
+    document.getElementById('v-mais-vendido-qtd').textContent = `${info.qtd} unidade(s) · ${fmt(info.valor)}`;
+  } else {
+    document.getElementById('v-mais-vendido').textContent = '—';
+    document.getElementById('v-mais-vendido-qtd').textContent = 'Sem vendas nos últimos 30 dias';
+  }
 }
 
 // Velocímetro de saúde do caixa: em vez de uma curva pra interpretar, uma
@@ -2237,11 +2316,50 @@ async function erpAuthHeader() {
 let chatHistory = [];
 let chatEnviando = false;
 
+function escapeHtml(s) {
+  return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
+
+// Markdown simples pra resposta do assistente: negrito, cabeçalhos, listas e
+// linha horizontal — só o que o modelo realmente usa, sem puxar uma
+// biblioteca de markdown completa (tabelas/código não aparecem nesse chat).
+function formatInline(texto) {
+  return texto
+    .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+    .replace(/(?<!\*)\*([^*]+?)\*(?!\*)/g, '<em>$1</em>');
+}
+
+function renderMarkdownSimples(texto) {
+  const linhas = escapeHtml(texto).split('\n');
+  let html = '';
+  let dentroLista = false;
+  const fecharLista = () => { if (dentroLista) { html += '</ul>'; dentroLista = false; } };
+  for (let linha of linhas) {
+    linha = linha.trim();
+    if (linha === '' ) { fecharLista(); continue; }
+    if (/^---+$/.test(linha)) { fecharLista(); html += '<hr>'; continue; }
+    const item = linha.match(/^[*-]\s+(.*)/);
+    if (item) {
+      if (!dentroLista) { html += '<ul>'; dentroLista = true; }
+      html += `<li>${formatInline(item[1])}</li>`;
+      continue;
+    }
+    fecharLista();
+    const cabecalho = linha.match(/^#{1,6}\s+(.*)/);
+    const conteudo = cabecalho ? cabecalho[1] : linha;
+    const formatado = formatInline(conteudo);
+    html += cabecalho ? `<p class="chat-heading">${formatado}</p>` : `<p>${formatado}</p>`;
+  }
+  fecharLista();
+  return html;
+}
+
 function chatAdicionarMensagem(role, texto) {
   const box = document.getElementById('chat-mensagens');
   const div = document.createElement('div');
   div.className = 'chat-msg ' + (role === 'user' ? 'chat-msg-user' : 'chat-msg-assistant');
-  div.textContent = texto;
+  if (role === 'user') div.textContent = texto;
+  else div.innerHTML = renderMarkdownSimples(texto);
   box.appendChild(div);
   box.scrollTop = box.scrollHeight;
   return div;

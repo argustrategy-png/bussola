@@ -45,6 +45,27 @@ const TOOLS = [
         description: 'Retorna um resumo financeiro atual: saldo em caixa, total a pagar e a receber nos próximos 30 dias, e contas vencidas. Use pra perguntas gerais sobre a saúde financeira do negócio.',
         parameters: { type: 'object', properties: {} },
       },
+      {
+        name: 'consultar_estoque',
+        description: 'Consulta a posição de estoque dos produtos sincronizados do ERP (hoje só disponível pra quem usa Bling). Use pra perguntas sobre quantidade em estoque de um produto, ou quais produtos estão com estoque baixo.',
+        parameters: {
+          type: 'object',
+          properties: {
+            nome: { type: 'string', description: 'Filtra por nome do produto (busca parcial).' },
+            apenas_estoque_baixo: { type: 'boolean', description: 'Se true, retorna só produtos com 5 unidades ou menos em estoque.' },
+          },
+        },
+      },
+      {
+        name: 'produtos_mais_vendidos',
+        description: 'Retorna o ranking de produtos/serviços mais vendidos nos últimos 30 dias, por quantidade e por valor total. Use pra perguntas sobre o que mais vendeu.',
+        parameters: {
+          type: 'object',
+          properties: {
+            limite: { type: 'integer', description: 'Quantos produtos no ranking (padrão 5, máximo 20).' },
+          },
+        },
+      },
     ],
   },
 ];
@@ -52,9 +73,9 @@ const TOOLS = [
 function today() { return new Date().toISOString().split('T')[0]; }
 function addDays(dateStr, n) { const d = new Date(dateStr + 'T12:00:00'); d.setDate(d.getDate() + n); return d.toISOString().split('T')[0]; }
 
-async function supabaseSelect(subscriberId, query) {
+async function supabaseSelect(subscriberId, query, tabela = 'lancamentos') {
   const resp = await fetch(
-    `${process.env.SUPABASE_URL}/rest/v1/lancamentos?subscriber_id=eq.${subscriberId}&${query}`,
+    `${process.env.SUPABASE_URL}/rest/v1/${tabela}?subscriber_id=eq.${subscriberId}&${query}`,
     { headers: { apikey: process.env.SUPABASE_SERVICE_ROLE_KEY, Authorization: `Bearer ${process.env.SUPABASE_SERVICE_ROLE_KEY}` } }
   );
   if (!resp.ok) throw new Error(`Supabase query falhou: ${resp.status} ${await resp.text()}`);
@@ -93,6 +114,29 @@ async function executarFerramenta(nome, input, subscriberId) {
       vencido_a_pagar: vencidoPagar,
       vencido_a_receber: vencidoReceber,
     };
+  }
+  if (nome === 'consultar_estoque') {
+    const params = ['select=nome,codigo,estoque_atual,preco,situacao'];
+    if (input.nome) params.push(`nome=ilike.*${encodeURIComponent(input.nome)}*`);
+    if (input.apenas_estoque_baixo) params.push('estoque_atual=lte.5');
+    params.push('order=estoque_atual.asc', 'limit=50');
+    const produtos = await supabaseSelect(subscriberId, params.join('&'), 'produtos');
+    if (!produtos.length) return { total_encontrado: 0, aviso: 'Nenhum produto sincronizado — só disponível pra quem tem Bling conectado.' };
+    return { total_encontrado: produtos.length, produtos };
+  }
+  if (nome === 'produtos_mais_vendidos') {
+    const itens = await supabaseSelect(subscriberId, 'select=produto_nome,quantidade,valor', 'vendas_itens');
+    if (!itens.length) return { aviso: 'Nenhuma venda sincronizada nos últimos 30 dias — só disponível pra quem tem Bling conectado.' };
+    const porProduto = {};
+    itens.forEach((item) => {
+      const chave = item.produto_nome;
+      if (!porProduto[chave]) porProduto[chave] = { produto: chave, quantidade_total: 0, valor_total: 0 };
+      porProduto[chave].quantidade_total += Number(item.quantidade) || 0;
+      porProduto[chave].valor_total += Number(item.valor) || 0;
+    });
+    const limite = Math.min(Number(input.limite) || 5, 20);
+    const ranking = Object.values(porProduto).sort((a, b) => b.quantidade_total - a.quantidade_total).slice(0, limite);
+    return { periodo: 'últimos 30 dias', ranking };
   }
   throw new Error(`Ferramenta desconhecida: ${nome}`);
 }

@@ -79,3 +79,19 @@ export async function upsertLancamentos(lancamentos) {
     body: JSON.stringify(lancamentos),
   });
 }
+
+export async function upsertProdutos(produtos) {
+  return fetch(`${process.env.SUPABASE_URL}/rest/v1/produtos?on_conflict=subscriber_id,provider,erp_id`, {
+    method: 'POST',
+    headers: serviceHeaders({ 'Content-Type': 'application/json', Prefer: 'resolution=merge-duplicates' }),
+    body: JSON.stringify(produtos),
+  });
+}
+
+export async function upsertVendasItens(itens) {
+  return fetch(`${process.env.SUPABASE_URL}/rest/v1/vendas_itens?on_conflict=subscriber_id,provider,pedido_erp_id,produto_erp_id`, {
+    method: 'POST',
+    headers: serviceHeaders({ 'Content-Type': 'application/json', Prefer: 'resolution=merge-duplicates' }),
+    body: JSON.stringify(itens),
+  });
+}

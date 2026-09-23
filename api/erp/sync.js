@@ -7,6 +7,8 @@ import {
   getIntegracao,
   patchIntegracao,
   upsertLancamentos,
+  upsertProdutos,
+  upsertVendasItens,
 } from '../_lib/supabase.js';
 
 export default async function handler(req, res) {
@@ -66,9 +68,42 @@ export default async function handler(req, res) {
       gravados = lancamentos.length;
     }
 
+    // Estoque e itens vendidos: só pra providers que implementam isso (hoje
+    // só Bling). Roda separado, sem deixar uma falha aqui derrubar o sync
+    // de contas a pagar/receber, que já é validado e é o que mais importa.
+    let produtosSincronizados = 0, itensVendaSincronizados = 0;
+    if (typeof provider.fetchProdutos === 'function') {
+      try {
+        const produtosBrutos = await provider.fetchProdutos(ctx);
+        const produtos = produtosBrutos.map((p) => provider.mapProduto(p, subscriberId));
+        if (produtos.length) {
+          const r = await upsertProdutos(produtos);
+          if (!r.ok) throw new Error(await r.text());
+          produtosSincronizados = produtos.length;
+        }
+      } catch (err) {
+        console.error(`${providerName} sync produtos error`, err);
+      }
+    }
+    if (typeof provider.fetchItensVenda === 'function') {
+      try {
+        const pedidosComItens = await provider.fetchItensVenda(ctx);
+        const itens = pedidosComItens.flatMap(({ pedido, itens: itensPedido }) =>
+          itensPedido.map((item) => provider.mapItemVenda(pedido, item, subscriberId))
+        );
+        if (itens.length) {
+          const r = await upsertVendasItens(itens);
+          if (!r.ok) throw new Error(await r.text());
+          itensVendaSincronizados = itens.length;
+        }
+      } catch (err) {
+        console.error(`${providerName} sync itens de venda error`, err);
+      }
+    }
+
     await patchIntegracao(integracao.id, { ultima_sincronizacao: new Date().toISOString() });
 
-    return res.status(200).json({ ok: true, sincronizados: gravados });
+    return res.status(200).json({ ok: true, sincronizados: gravados, produtosSincronizados, itensVendaSincronizados });
   } catch (err) {
     console.error(`${providerName} sync error`, err);
     return res.status(500).json({ error: 'sync_failed', detail: String(err.message || err) });
