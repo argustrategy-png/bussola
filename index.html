@@ -434,21 +434,6 @@
   </div>
   <div class="section-title">Alertas</div>
   <div class="insights" id="insights-box"></div>
-
-  <div id="estoque-secao" style="display:none">
-    <div class="section-title">Estoque e Vendas (Bling)</div>
-    <div class="cards">
-      <div class="card" id="card-mais-vendido"><label>Maior faturamento (30 dias)</label><div class="val" id="v-mais-vendido">—</div><div class="sub" id="v-mais-vendido-qtd">—</div></div>
-      <div class="card"><label>Produtos cadastrados</label><div class="val" id="v-total-produtos">0</div><div class="sub">Sincronizados do ERP</div></div>
-      <div class="card red"><label>Estoque baixo</label><div class="val" id="v-estoque-baixo">0</div><div class="sub">Produtos com 5 unidades ou menos</div></div>
-    </div>
-    <div class="table-wrap">
-      <table>
-        <thead><tr><th>Produto</th><th>Código</th><th>Estoque</th></tr></thead>
-        <tbody id="tabela-estoque-baixo"></tbody>
-      </table>
-    </div>
-  </div>
 </div>
 
 <!-- INDICADORES -->
@@ -842,8 +827,6 @@ function toggleTheme() {
 
 // ─── STATE ───────────────────────────────────────────────
 let data = [];
-let produtosData = [];
-let vendasItensData = [];
 let paramsState = JSON.parse(localStorage.getItem('meuargus_params') || '{"selic":10.75,"cartao":3.5,"margem":null,"metaMargem":25}');
 if (paramsState.metaMargem === undefined) paramsState.metaMargem = 25;
 const TEMPLATES_PADRAO = {
@@ -1235,26 +1218,7 @@ async function loadData() {
   const { data: rows, error } = await sb.from('lancamentos').select('*').order('vencimento', { ascending: true });
   if (error) { showSync('Erro ao carregar dados ✗', true); return; }
   data = rows || [];
-  await loadEstoqueDados();
   refreshAll();
-}
-
-// Estoque e vendas por produto — tabelas separadas de `lancamentos`,
-// preenchidas só pra providers que suportam isso (hoje só Bling). Falha
-// silenciosa: nem toda conta tem essas tabelas povoadas, e isso não deveria
-// travar o resto do painel.
-async function loadEstoqueDados() {
-  try {
-    const [{ data: produtos }, { data: itens }] = await Promise.all([
-      sb.from('produtos').select('*').order('estoque_atual', { ascending: true }),
-      sb.from('vendas_itens').select('*'),
-    ]);
-    produtosData = produtos || [];
-    vendasItensData = itens || [];
-  } catch (e) {
-    produtosData = [];
-    vendasItensData = [];
-  }
 }
 
 async function _insert(item) {
@@ -1357,46 +1321,7 @@ function renderDashboard() {
   renderGaugeCaixa();
   renderGaugeMeta();
   renderAlertas(saldo, recv30, pag30);
-  renderEstoqueSecao();
   document.getElementById('hd-subtitle').textContent = `${data.length} lançamentos · Saldo ${fmt(saldo)}`;
-}
-
-// Estoque e produto mais vendido — só aparece se o ERP conectado sincronizar
-// esses dados (hoje só Bling); pra quem não tem, a seção fica escondida em
-// vez de mostrar zeros sem sentido.
-function renderEstoqueSecao() {
-  const secao = document.getElementById('estoque-secao');
-  if (!produtosData.length) { secao.style.display = 'none'; return; }
-  secao.style.display = 'block';
-
-  document.getElementById('v-total-produtos').textContent = produtosData.length;
-
-  const baixo = produtosData.filter(p => p.estoque_atual !== null && p.estoque_atual <= 5).sort((a, b) => a.estoque_atual - b.estoque_atual);
-  document.getElementById('v-estoque-baixo').textContent = baixo.length;
-  const corBaixo = document.querySelector('#estoque-secao .card.red .val');
-  if (corBaixo) corBaixo.parentElement.className = 'card ' + (baixo.length > 0 ? 'red' : '');
-  document.getElementById('tabela-estoque-baixo').innerHTML = baixo.slice(0, 10).map(p =>
-    `<tr><td>${p.nome}</td><td>${p.codigo || '—'}</td><td>${p.estoque_atual}</td></tr>`
-  ).join('') || '<tr><td colspan="3">Nenhum produto com estoque baixo.</td></tr>';
-
-  const porProduto = {};
-  vendasItensData.forEach(item => {
-    const chave = item.produto_nome;
-    if (!porProduto[chave]) porProduto[chave] = { qtd: 0, valor: 0 };
-    porProduto[chave].qtd += Number(item.quantidade) || 0;
-    porProduto[chave].valor += Number(item.valor) || 0;
-  });
-  // Ordenado por faturamento — pra serviço, quantidade de "unidades" não é
-  // comparável entre um contrato fechado e uma locação avulsa.
-  const ranking = Object.entries(porProduto).sort((a, b) => b[1].valor - a[1].valor);
-  if (ranking.length) {
-    const [nome, info] = ranking[0];
-    document.getElementById('v-mais-vendido').textContent = nome;
-    document.getElementById('v-mais-vendido-qtd').textContent = `${fmt(info.valor)} de faturamento · ${info.qtd} unidade(s)`;
-  } else {
-    document.getElementById('v-mais-vendido').textContent = '—';
-    document.getElementById('v-mais-vendido-qtd').textContent = 'Sem vendas nos últimos 30 dias';
-  }
 }
 
 // Velocímetro de saúde do caixa: em vez de uma curva pra interpretar, uma
