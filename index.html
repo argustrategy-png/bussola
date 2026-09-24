@@ -409,7 +409,7 @@
   <div id="estoque-secao" style="display:none">
     <div class="section-title">Estoque e Vendas (Bling)</div>
     <div class="cards">
-      <div class="card" id="card-mais-vendido"><label>Mais vendido (30 dias)</label><div class="val" id="v-mais-vendido">—</div><div class="sub" id="v-mais-vendido-qtd">—</div></div>
+      <div class="card" id="card-mais-vendido"><label>Maior faturamento (30 dias)</label><div class="val" id="v-mais-vendido">—</div><div class="sub" id="v-mais-vendido-qtd">—</div></div>
       <div class="card"><label>Produtos cadastrados</label><div class="val" id="v-total-produtos">0</div><div class="sub">Sincronizados do ERP</div></div>
       <div class="card red"><label>Estoque baixo</label><div class="val" id="v-estoque-baixo">0</div><div class="sub">Produtos com 5 unidades ou menos</div></div>
     </div>
@@ -1333,11 +1333,13 @@ function renderEstoqueSecao() {
     porProduto[chave].qtd += Number(item.quantidade) || 0;
     porProduto[chave].valor += Number(item.valor) || 0;
   });
-  const ranking = Object.entries(porProduto).sort((a, b) => b[1].qtd - a[1].qtd);
+  // Ordenado por faturamento — pra serviço, quantidade de "unidades" não é
+  // comparável entre um contrato fechado e uma locação avulsa.
+  const ranking = Object.entries(porProduto).sort((a, b) => b[1].valor - a[1].valor);
   if (ranking.length) {
     const [nome, info] = ranking[0];
     document.getElementById('v-mais-vendido').textContent = nome;
-    document.getElementById('v-mais-vendido-qtd').textContent = `${info.qtd} unidade(s) · ${fmt(info.valor)}`;
+    document.getElementById('v-mais-vendido-qtd').textContent = `${fmt(info.valor)} de faturamento · ${info.qtd} unidade(s)`;
   } else {
     document.getElementById('v-mais-vendido').textContent = '—';
     document.getElementById('v-mais-vendido-qtd').textContent = 'Sem vendas nos últimos 30 dias';

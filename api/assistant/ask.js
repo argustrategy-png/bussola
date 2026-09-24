@@ -58,7 +58,7 @@ const TOOLS = [
       },
       {
         name: 'produtos_mais_vendidos',
-        description: 'Retorna o ranking de produtos/serviços mais vendidos nos últimos 30 dias, por quantidade e por valor total. Use pra perguntas sobre o que mais vendeu.',
+        description: 'Retorna o ranking de produtos/serviços que mais faturaram nos últimos 30 dias, ordenado por valor total (não por quantidade — quantidade não é comparável entre um contrato de serviço e um item avulso). Use pra perguntas sobre o que mais vendeu ou mais faturou.',
         parameters: {
           type: 'object',
           properties: {
@@ -135,8 +135,12 @@ async function executarFerramenta(nome, input, subscriberId) {
       porProduto[chave].valor_total += Number(item.valor) || 0;
     });
     const limite = Math.min(Number(input.limite) || 5, 20);
-    const ranking = Object.values(porProduto).sort((a, b) => b.quantidade_total - a.quantidade_total).slice(0, limite);
-    return { periodo: 'últimos 30 dias', ranking };
+    // Ordenado por faturamento, não por quantidade: pra negócio de serviço,
+    // "mais vendido" por unidade não faz sentido (uma consultoria e uma
+    // locação avulsa não são comparáveis por contagem) — o que importa é
+    // quem contribuiu mais em receita.
+    const ranking = Object.values(porProduto).sort((a, b) => b.valor_total - a.valor_total).slice(0, limite);
+    return { periodo: 'últimos 30 dias', ordenado_por: 'faturamento (valor_total)', ranking };
   }
   throw new Error(`Ferramenta desconhecida: ${nome}`);
 }
