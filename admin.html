@@ -373,6 +373,26 @@
   </div>
 </div>
 
+<!-- ══ MODAL REDEFINIR SENHA DE ASSINANTE ══ -->
+<div class="modal-bg" id="modal-reset">
+  <div class="modal">
+    <div class="modal-header">
+      <h2 id="reset-title">Redefinir senha</h2>
+      <button class="modal-close" onclick="closeResetModal()">✕</button>
+    </div>
+    <div class="modal-body">
+      <div id="reset-email" style="font-size:.85rem;color:var(--text2);margin-bottom:12px"></div>
+      <div class="form-field"><label>Nova senha</label><input id="reset-senha" type="text" autocomplete="off" placeholder="Mínimo 8 caracteres"></div>
+      <div id="reset-error" style="display:none;color:var(--red);font-size:.85rem;margin-top:4px"></div>
+      <div style="font-size:.78rem;color:var(--text2);margin-top:10px;line-height:1.5">Você precisa repassar essa senha ao assinante. Se o problema for e-mail não confirmado, use "Confirmar e-mail".</div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-outline" onclick="confirmarEmailAssinante()">Confirmar e-mail</button>
+      <button class="btn btn-gold" onclick="definirSenhaAssinante()">Definir senha</button>
+    </div>
+  </div>
+</div>
+
 <!-- ══ MODAL TROCAR SENHA ══ -->
 <div class="modal-bg" id="modal-password">
   <div class="modal">
@@ -592,6 +612,7 @@ function renderTable() {
         <td><div style="display:flex;gap:6px">
           <button class="btn-sm btn-view"   onclick="viewSubscriber('${s.id}')">Ver</button>
           <button class="btn-sm btn-edit"   onclick="editSubscriber('${s.id}')">Editar</button>
+          <button class="btn-sm btn-edit"   onclick="openResetModal('${s.id}')">Senha</button>
           <button class="btn-sm btn-delete" onclick="deleteSubscriber('${s.id}','${s.nome}')">✕</button>
         </div></td>
       </tr>`).join('');
@@ -669,6 +690,52 @@ async function deleteSubscriber(id, nome) {
   if (error) { toast('Erro: ' + error.message, 'err'); return; }
   toast('Assinante removido.');
   await loadAll();
+}
+
+// ── RESET MANUAL DE SENHA / CONFIRMAÇÃO DE E-MAIL ──
+let resetUserId = null;
+function openResetModal(id) {
+  const s = all.find(x => x.id === id);
+  resetUserId = id;
+  document.getElementById('reset-title').textContent = 'Redefinir senha — ' + s.nome;
+  document.getElementById('reset-email').textContent = s.email;
+  document.getElementById('reset-senha').value = '';
+  document.getElementById('reset-error').style.display = 'none';
+  document.getElementById('modal-reset').classList.add('open');
+}
+function closeResetModal() { document.getElementById('modal-reset').classList.remove('open'); resetUserId = null; }
+
+async function adminUserAction(payload) {
+  const { data: { session } } = await sb.auth.getSession();
+  const resp = await fetch('/api/admin/user-action', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + session.access_token },
+    body: JSON.stringify({ userId: resetUserId, ...payload }),
+  });
+  const json = await resp.json().catch(() => ({}));
+  if (!resp.ok) throw new Error(json.error || 'Erro ' + resp.status);
+}
+
+async function definirSenhaAssinante() {
+  const err = document.getElementById('reset-error');
+  const senha = document.getElementById('reset-senha').value;
+  if (senha.length < 8) { err.textContent = 'A senha deve ter pelo menos 8 caracteres.'; err.style.display = 'block'; return; }
+  showLoading(true);
+  try { await adminUserAction({ action: 'set_password', password: senha }); }
+  catch (e) { showLoading(false); err.textContent = e.message; err.style.display = 'block'; return; }
+  showLoading(false);
+  closeResetModal();
+  toast('Senha definida. Repasse-a ao assinante.');
+}
+
+async function confirmarEmailAssinante() {
+  const err = document.getElementById('reset-error');
+  showLoading(true);
+  try { await adminUserAction({ action: 'confirm_email' }); }
+  catch (e) { showLoading(false); err.textContent = e.message; err.style.display = 'block'; return; }
+  showLoading(false);
+  closeResetModal();
+  toast('E-mail confirmado.');
 }
 
 // ── VIEW ─────────────────────────────────────
