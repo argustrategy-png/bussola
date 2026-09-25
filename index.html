@@ -956,9 +956,26 @@ async function doAuthSubmit() {
     onAuthed(sd.user);
   } else {
     const { data: sd, error } = await sb.auth.signInWithPassword({ email, password: pass });
-    if (error) { err.textContent = 'E-mail ou senha incorretos.'; err.style.display = 'block'; return; }
+    if (error) {
+      if (error.code === 'email_not_confirmed' || /not confirmed/i.test(error.message || '')) {
+        err.innerHTML = 'Seu e-mail ainda não foi confirmado. Abra o link que enviamos para ' + escapeHtml(email) + ' (veja também o spam) ou <a onclick="reenviarConfirmacao()" style="cursor:pointer;text-decoration:underline">reenviar o link de confirmação</a>.';
+      } else {
+        err.textContent = 'E-mail ou senha incorretos.';
+      }
+      err.style.display = 'block';
+      return;
+    }
     onAuthed(sd.user);
   }
+}
+
+async function reenviarConfirmacao() {
+  const email = document.getElementById('auth-email').value.trim();
+  const err = document.getElementById('auth-error');
+  const { error } = await sb.auth.resend({ type: 'signup', email });
+  if (error) { err.textContent = error.message; err.style.color = 'var(--red)'; return; }
+  err.textContent = 'Link de confirmação reenviado para ' + email + '. Confira sua caixa de entrada.';
+  err.style.color = 'var(--green)';
 }
 
 function escolherErpAuth(erp) {
