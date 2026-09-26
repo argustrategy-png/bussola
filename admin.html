@@ -249,6 +249,7 @@
     <div style="display:flex;align-items:center;gap:12px">
       <span style="font-size:.8rem;color:var(--text2)" id="admin-name"></span>
       <button class="theme-toggle" onclick="toggleTheme()" id="theme-toggle-app">🌙</button>
+      <button class="btn-outline" onclick="testarHomologacaoBling()">Homologação Bling</button>
       <button class="btn-outline" onclick="openPasswordModal()">Trocar senha</button>
       <button class="btn-logout" onclick="doLogout()">Sair</button>
     </div>
@@ -736,6 +737,29 @@ async function confirmarEmailAssinante() {
   showLoading(false);
   closeResetModal();
   toast('E-mail confirmado.');
+}
+
+// ── TESTE DE HOMOLOGAÇÃO DO BLING ──
+async function testarHomologacaoBling() {
+  const email = prompt('E-mail do assinante com o Bling conectado ao app NOVO (o teste roda com o token dele):');
+  if (!email) return;
+  const s = all.find(x => (x.email || '').toLowerCase() === email.trim().toLowerCase());
+  if (!s) { alert('Assinante não encontrado na lista.'); return; }
+  showLoading(true);
+  try {
+    const { data: { session } } = await sb.auth.getSession();
+    const resp = await fetch('/api/admin/bling-homologacao', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + session.access_token },
+      body: JSON.stringify({ userId: s.id }),
+    });
+    const r = await resp.json();
+    if (!resp.ok) { alert('Erro: ' + (r.error || resp.status)); return; }
+    const linhas = (r.passos || []).map(p => `${p.ok ? '✅' : '❌'} ${p.passo} — HTTP ${p.status} (${p.ms} ms)${p.tokenRenovado ? ' [token renovado]' : ''}${p.erro ? '\n     ' + p.erro : ''}`);
+    alert((r.ok ? (r.dentroDoLimite ? 'TESTE OK' : 'Passou, mas acima de 10s — rode de novo') : 'TESTE FALHOU: ' + r.erro)
+      + `\nTotal: ${r.totalMs} ms (limite 10000)\n\n` + linhas.join('\n'));
+  } catch (e) { alert('Erro: ' + e.message); }
+  finally { showLoading(false); }
 }
 
 // ── VIEW ─────────────────────────────────────
