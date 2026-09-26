@@ -1,4 +1,5 @@
-// POST /api/admin/bling-homologacao  { userId }
+// Teste técnico de homologação do Bling (chamado por /api/admin/user-action com
+// action 'bling_homologacao').
 // Roda o teste técnico de homologação do Bling (API /homologacao/produtos) usando
 // a integração Bling já conectada de `userId`. Só administradores. Só toca nos
 // endpoints de homologação do Bling (produto fictício), nunca em dados reais.
@@ -7,34 +8,15 @@
 // o header x-bling-homologacao que vai no request seguinte; no máximo 10s no total;
 // em uma das etapas o access token é invalidado e é preciso renovar com o refresh token.
 
-import { getAuthenticatedSubscriber, getIntegracao, patchIntegracao } from '../_lib/supabase.js';
-import { bling } from '../_lib/providers/bling.js';
+import { getIntegracao, patchIntegracao } from './supabase.js';
+import { bling } from './providers/bling.js';
 
 const API = 'https://api.bling.com.br/Api/v3/homologacao/produtos';
 const LIMITE_TOTAL_MS = 10_000;
 
-function serviceHeaders() {
-  return { apikey: process.env.SUPABASE_SERVICE_ROLE_KEY, Authorization: `Bearer ${process.env.SUPABASE_SERVICE_ROLE_KEY}` };
-}
-
-async function isAdmin(userId) {
-  const resp = await fetch(`${process.env.SUPABASE_URL}/rest/v1/subscribers?id=eq.${userId}&select=is_admin`, { headers: serviceHeaders() });
-  const rows = await resp.json();
-  return rows?.[0]?.is_admin === true;
-}
-
-export default async function handler(req, res) {
-  if (req.method !== 'POST') return res.status(405).json({ error: 'method_not_allowed' });
-
-  const callerId = await getAuthenticatedSubscriber(req);
-  if (!callerId) return res.status(401).json({ error: 'não autenticado' });
-  if (!(await isAdmin(callerId))) return res.status(403).json({ error: 'apenas_admin' });
-
-  const { userId } = req.body || {};
-  if (!userId) return res.status(400).json({ error: 'userId obrigatório' });
-
+export async function rodarHomologacaoBling(userId) {
   const integracao = await getIntegracao(userId, 'bling');
-  if (!integracao) return res.status(404).json({ error: 'bling_nao_conectado' });
+  if (!integracao) return { status: 404, body: { error: 'bling_nao_conectado' } };
 
   let accessToken = integracao.access_token;
   let refreshToken = integracao.refresh_token;
@@ -97,9 +79,9 @@ export default async function handler(req, res) {
     await chamar('5. DELETE remover produto', 'DELETE', `${API}/${id}`);
 
     const totalMs = Date.now() - inicio;
-    return res.status(200).json({ ok: true, dentroDoLimite: totalMs <= LIMITE_TOTAL_MS, totalMs, tokenRenovado: renovou, passos });
+    return { status: 200, body: { ok: true, dentroDoLimite: totalMs <= LIMITE_TOTAL_MS, totalMs, tokenRenovado: renovou, passos } };
   } catch (err) {
     console.error('bling homologacao falhou', err.message);
-    return res.status(200).json({ ok: false, erro: String(err.message || err), totalMs: Date.now() - inicio, tokenRenovado: renovou, passos });
+    return { status: 200, body: { ok: false, erro: String(err.message || err), totalMs: Date.now() - inicio, tokenRenovado: renovou, passos } };
   }
 }

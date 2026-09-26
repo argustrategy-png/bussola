@@ -748,10 +748,10 @@ async function testarHomologacaoBling() {
   showLoading(true);
   try {
     const { data: { session } } = await sb.auth.getSession();
-    const resp = await fetch('/api/admin/bling-homologacao', {
+    const resp = await fetch('/api/admin/user-action', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + session.access_token },
-      body: JSON.stringify({ userId: s.id }),
+      body: JSON.stringify({ userId: s.id, action: 'bling_homologacao' }),
     });
     const r = await resp.json();
     if (!resp.ok) { alert('Erro: ' + (r.error || resp.status)); return; }

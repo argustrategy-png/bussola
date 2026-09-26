@@ -1,7 +1,9 @@
-// POST /api/admin/user-action  { userId, action: 'set_password' | 'confirm_email', password? }
+// POST /api/admin/user-action  { userId, action: 'set_password' | 'confirm_email' | 'bling_homologacao', password? }
+// (Uma rota só de admin: o plano Hobby da Vercel limita a 12 functions por deploy.)
 // Só administradores (subscribers.is_admin). Usa a service_role pra mexer em auth.users.
 
 import { getAuthenticatedSubscriber } from '../_lib/supabase.js';
+import { rodarHomologacaoBling } from '../_lib/bling-homologacao.js';
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -31,6 +33,11 @@ export default async function handler(req, res) {
 
   const { userId, action, password } = req.body || {};
   if (!userId || !UUID.test(userId)) return res.status(400).json({ error: 'userId inválido' });
+
+  if (action === 'bling_homologacao') {
+    const { status, body } = await rodarHomologacaoBling(userId);
+    return res.status(status).json(body);
+  }
 
   let body;
   if (action === 'set_password') {
