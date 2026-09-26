@@ -6,6 +6,31 @@ const TOKEN_URL = 'https://www.bling.com.br/Api/v3/oauth/token';
 const EMPRESAS_URL = 'https://api.bling.com.br/Api/v3/empresas/me/dados-basicos';
 const API_BASE = 'https://api.bling.com.br/Api/v3';
 
+const POR_PAGINA = 100;
+// Teto de segurança: a function da Vercel tem tempo limitado e o Bling limita
+// a 3 requisições por segundo, então não dá pra puxar histórico infinito.
+const MAX_PAGINAS = 20;
+
+// Percorre todas as páginas de uma listagem do Bling (pagina=1,2,...) até vir
+// uma página incompleta. Uma nova tentativa em 429 (limite de taxa) por página.
+async function fetchTodasPaginas(caminho, accessToken, rotulo) {
+  const todos = [];
+  for (let pagina = 1; pagina <= MAX_PAGINAS; pagina++) {
+    const url = `${API_BASE}${caminho}${caminho.includes('?') ? '&' : '?'}pagina=${pagina}&limite=${POR_PAGINA}`;
+    const init = { headers: { Authorization: `Bearer ${accessToken}`, Accept: 'application/json' } };
+    let resp = await fetch(url, init);
+    if (resp.status === 429) {
+      await new Promise((r) => setTimeout(r, 1200));
+      resp = await fetch(url, init);
+    }
+    if (!resp.ok) throw new Error(`Bling ${rotulo} falhou: ${resp.status} ${await resp.text()}`);
+    const itens = (await resp.json())?.data || [];
+    todos.push(...itens);
+    if (itens.length < POR_PAGINA) break;
+  }
+  return todos;
+}
+
 export const bling = {
   name: 'bling',
   label: 'Bling',
@@ -63,12 +88,7 @@ export const bling = {
   },
 
   async fetchContas({ accessToken, tipo }) {
-    const resp = await fetch(`${API_BASE}/contas/${tipo}?pagina=1&limite=100`, {
-      headers: { Authorization: `Bearer ${accessToken}`, Accept: 'application/json' },
-    });
-    if (!resp.ok) throw new Error(`Bling contas/${tipo} falhou: ${resp.status} ${await resp.text()}`);
-    const json = await resp.json();
-    return json?.data || [];
+    return fetchTodasPaginas(`/contas/${tipo}`, accessToken, `contas/${tipo}`);
   },
 
   // Confirmado contra o OpenAPI oficial do Bling (ContasDadosBaseDTO): a
@@ -104,12 +124,7 @@ export const bling = {
     // confirmado como filtro aceito pelo endpoint (só como campo de
     // resposta); produtos inativos entram e ficam marcados via `situacao`
     // no registro salvo, pra UI decidir se esconde.
-    const resp = await fetch(`${API_BASE}/produtos?pagina=1&limite=100`, {
-      headers: { Authorization: `Bearer ${accessToken}`, Accept: 'application/json' },
-    });
-    if (!resp.ok) throw new Error(`Bling /produtos falhou: ${resp.status} ${await resp.text()}`);
-    const json = await resp.json();
-    return json?.data || [];
+    return fetchTodasPaginas('/produtos', accessToken, '/produtos');
   },
 
   mapProduto(produto, subscriberId) {
