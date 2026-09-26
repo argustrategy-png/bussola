@@ -1,7 +1,21 @@
 {
   "rewrites": [
-    { "source": "/admin", "destination": "/admin.html" },
-    { "source": "/app",   "destination": "/index.html" },
-    { "source": "/",      "destination": "/index.html" }
-  ]
+    {
+      "source": "/admin",
+      "destination": "/admin.html"
+    },
+    {
+      "source": "/app",
+      "destination": "/index.html"
+    },
+    {
+      "source": "/",
+      "destination": "/index.html"
+    }
+  ],
+  "functions": {
+    "api/admin/user-action.js": {
+      "maxDuration": 30
+    }
+  }
 }

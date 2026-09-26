@@ -13,6 +13,9 @@ import { bling } from './providers/bling.js';
 
 const API = 'https://api.bling.com.br/Api/v3/homologacao/produtos';
 const LIMITE_TOTAL_MS = 10_000;
+// O Bling exige ~2s entre requests do teste (menos que isso devolve 429). Com 5
+// requests, começar uma a cada 2,05s termina por volta de 8,5s, abaixo dos 10s.
+const INTERVALO_MS = 2_050;
 
 export async function rodarHomologacaoBling(userId) {
   const integracao = await getIntegracao(userId, 'bling');
@@ -22,6 +25,7 @@ export async function rodarHomologacaoBling(userId) {
   let refreshToken = integracao.refresh_token;
   let hash = null;
   let renovou = false;
+  let ultimoInicio = 0;
   const passos = [];
   const inicio = Date.now();
 
@@ -39,7 +43,12 @@ export async function rodarHomologacaoBling(userId) {
   }
 
   async function chamar(nome, metodo, url, body) {
+    if (ultimoInicio) {
+      const espera = INTERVALO_MS - (Date.now() - ultimoInicio);
+      if (espera > 0) await new Promise((r) => setTimeout(r, espera));
+    }
     const t0 = Date.now();
+    ultimoInicio = t0;
     const montar = () => {
       const headers = { Authorization: `Bearer ${accessToken}`, Accept: 'application/json' };
       if (body !== undefined) headers['Content-Type'] = 'application/json';
