@@ -11,7 +11,9 @@ export async function handleOAuthCallback(providerName, req, res) {
   const { code, state, error, realmId } = req.query;
 
   if (error) return res.redirect(`/app?erp_erro=${encodeURIComponent(error)}`);
-  if (!code || !state) return res.status(400).send('Parâmetros ausentes (code/state).');
+  // Sem `state` (ex.: instalação iniciada pela Central de Extensões do ERP, fora do
+  // MeuArgus) não sabemos de qual assinante é: manda pra uma tela amigável.
+  if (!code || !state) return res.redirect(`/app?erp_erro=iniciar_pelo_meuargus&provider=${providerName}`);
 
   const subscriberId = state;
   const redirectUri = `https://${req.headers.host}/api/${providerName}/callback`;

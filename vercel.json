@@ -5,6 +5,10 @@
       "destination": "/admin.html"
     },
     {
+      "source": "/manual",
+      "destination": "/manual.html"
+    },
+    {
       "source": "/app",
       "destination": "/index.html"
     },

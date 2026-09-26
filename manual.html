@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Manual — Integração MeuArgus com Bling</title>
+<meta name="description" content="Como conectar o Bling ao MeuArgus para sincronizar contas a pagar, contas a receber, produtos e estoque.">
+<style>
+  :root { --bg:#f4f6fb; --surface:#fff; --text:#1a2233; --text2:#5b6478; --accent:#2f54d4; --border:#e2e6ef; }
+  @media (prefers-color-scheme: dark) { :root { --bg:#0f1420; --surface:#171d2c; --text:#e8ecf5; --text2:#9aa4ba; --accent:#7c9bff; --border:#2a3348; } }
+  * { box-sizing: border-box; }
+  body { margin:0; font-family: -apple-system, 'Inter', system-ui, sans-serif; background:var(--bg); color:var(--text); line-height:1.65; }
+  main { max-width: 760px; margin: 0 auto; padding: 32px 16px 64px; }
+  .card { background:var(--surface); border:1px solid var(--border); border-radius:14px; padding:24px; margin-bottom:18px; }
+  h1 { font-size:1.6rem; margin:0 0 8px; color:var(--accent); }
+  h2 { font-size:1.1rem; margin:0 0 10px; }
+  p, li { color:var(--text2); }
+  li { margin-bottom:6px; }
+  strong { color:var(--text); }
+  a { color:var(--accent); }
+  .btn { display:inline-block; background:var(--accent); color:#fff; padding:11px 18px; border-radius:9px; text-decoration:none; font-weight:600; margin-top:6px; }
+  @media (prefers-color-scheme: dark) { .btn { color:#0f1420; } }
+</style>
+</head>
+<body>
+<main>
+  <div class="card">
+    <h1>🧭 MeuArgus + Bling</h1>
+    <p>O MeuArgus é um sistema de fluxo de caixa que se conecta ao seu Bling para trazer <strong>contas a pagar, contas a receber, produtos e estoque</strong> automaticamente — sem digitar nem importar planilhas. Este manual mostra como conectar.</p>
+    <a class="btn" href="https://meuargus.com/app">Abrir o MeuArgus</a>
+  </div>
+
+  <div class="card">
+    <h2>Antes de começar</h2>
+    <ul>
+      <li>É necessário ter uma <strong>conta no MeuArgus</strong>. Crie em <a href="https://meuargus.com/app">meuargus.com/app</a> com seu e-mail ou com o Google. Há um período de teste grátis.</li>
+      <li>Você precisa de acesso ao <strong>Bling da sua empresa</strong> (usuário com permissão para autorizar aplicativos).</li>
+      <li>Cada empresa do Bling (CNPJ) só pode estar ligada a <strong>uma</strong> conta do MeuArgus.</li>
+    </ul>
+  </div>
+
+  <div class="card">
+    <h2>Passo a passo</h2>
+    <ol>
+      <li>Entre no MeuArgus em <a href="https://meuargus.com/app">meuargus.com/app</a>.</li>
+      <li>No topo da tela, clique em <strong>🔌 Integrações</strong>.</li>
+      <li>Em <strong>Bling</strong>, clique em <strong>Conectar com Bling</strong>.</li>
+      <li>Você será levado ao Bling. Entre com o <strong>login da sua própria empresa</strong> e clique para <strong>autorizar</strong> o aplicativo.</li>
+      <li>Você volta ao MeuArgus com a mensagem "Bling conectado". A primeira sincronização começa em seguida, e seus lançamentos aparecem no Painel.</li>
+    </ol>
+    <p><strong>Importante:</strong> se você usa mais de uma empresa no Bling, confirme na tela de autorização qual está logada — a conexão será feita com ela.</p>
+  </div>
+
+  <div class="card">
+    <h2>O que é sincronizado</h2>
+    <ul>
+      <li><strong>Contas a pagar e a receber</strong> — valores, vencimentos e situação.</li>
+      <li><strong>Produtos e posição de estoque</strong>.</li>
+      <li><strong>Itens dos pedidos de venda dos últimos 30 dias</strong>, para saber o que mais faturou.</li>
+    </ul>
+    <p>O MeuArgus <strong>só lê</strong> essas informações: ele não cria, altera nem apaga nada no seu Bling. A sincronização é automática, a cada hora, e você também pode clicar em <strong>Sincronizar agora</strong> em 🔌 Integrações.</p>
+  </div>
+
+  <div class="card">
+    <h2>Desconectar</h2>
+    <p>Em <strong>🔌 Integrações</strong>, clique em <strong>Desconectar</strong>. Você também pode desinstalar o aplicativo no Bling, em <strong>Central de Extensões → Minhas instalações</strong>.</p>
+  </div>
+
+  <div class="card">
+    <h2>Problemas comuns</h2>
+    <ul>
+      <li><strong>"Essa conta já está conectada a outra conta MeuArgus"</strong> — aquele Bling já foi ligado a outro cadastro. Entre com o e-mail que fez a primeira conexão ou fale com o suporte.</li>
+      <li><strong>Conectou o Bling errado</strong> — desconecte em Integrações, saia do Bling no navegador (ou use uma janela anônima) e conecte de novo.</li>
+      <li><strong>Autorização expirada</strong> — clique em Conectar com Bling novamente para autorizar outra vez.</li>
+    </ul>
+  </div>
+
+  <div class="card">
+    <h2>Suporte</h2>
+    <p>WhatsApp: <a href="https://wa.me/551152256779">+55 11 5225-6779</a><br>E-mail: <a href="mailto:aage@aage.com.br">aage@aage.com.br</a></p>
+  </div>
+</main>
+</body>
+</html>
