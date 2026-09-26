@@ -172,6 +172,26 @@
   .chat-form input { flex: 1; padding: 11px 14px; border: 1px solid var(--border); border-radius: 8px; font-size: .95rem; background: var(--surface); color: var(--text); }
   .chat-form input:focus { outline: none; border-color: var(--accent); }
 
+  #app-content { padding-bottom: 84px; }
+  .painel-duo { display:grid; gap:16px; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); margin-bottom: 20px; }
+  .painel-box { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 14px 16px; }
+  .painel-box .section-title { margin-top: 0; }
+  .ag-item { display:flex; align-items:center; gap:10px; padding:9px 0; border-bottom:1px solid var(--border); font-size:.88rem; }
+  .ag-item:last-of-type { border-bottom:none; }
+  .ag-quando { flex:none; width:54px; font-weight:700; font-size:.78rem; color:var(--text2); text-transform:uppercase; }
+  .ag-quando.hoje { color: var(--amber); }
+  .ag-desc { flex:1; min-width:0; line-height:1.3; }
+  .ag-tit { display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden; word-break:break-word; }
+  .ag-desc small { display:block; color:var(--text2); font-size:.74rem; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .ag-valor { flex:none; font-weight:700; font-variant-numeric: tabular-nums; }
+  .ag-vazio { color: var(--text2); font-size:.88rem; padding:8px 0; }
+  .ag-link { display:flex; align-items:center; min-height:44px; margin-top:4px; font-size:.9rem; font-weight:600; color:var(--accent); cursor:pointer; text-decoration:underline; background:none; border:none; padding:0; }
+  .ag-resumo { display:flex; flex-wrap:wrap; gap:2px 14px; font-size:.9rem; margin-bottom:6px; color:var(--text2); }
+  .ag-resumo span { white-space:nowrap; }
+  .ag-resumo strong { color:var(--red); font-size:1.1rem; }
+  .caixa-min { font-size:1.05rem; font-weight:700; margin-bottom:2px; }
+  .caixa-min.crit { color: var(--red); } .caixa-min.warn { color: var(--amber); } .caixa-min.ok { color: var(--green); }
+  .caixa-min-sub { font-size:.82rem; color:var(--text2); margin-bottom:10px; }
   .assistente-fab {
     position: fixed; bottom: 22px; right: 22px; z-index: 60;
     width: 56px; height: 56px; border-radius: 50%; border: none;
@@ -417,6 +437,17 @@
     <div class="card red"><label>A Pagar (próx. 30d)</label><div class="val" id="c-pagar">R$ 0</div></div>
     <div class="card" id="card-liquido"><label>Saldo Previsto (30d)</label><div class="val" id="c-liquido">R$ 0</div></div>
   </div>
+  <div class="painel-duo">
+    <div class="painel-box">
+      <div class="section-title">Agenda da semana</div>
+      <div id="agenda-box"></div>
+    </div>
+    <div class="painel-box">
+      <div class="section-title">Quem está atrasado</div>
+      <div id="atrasados-box"></div>
+    </div>
+  </div>
+
   <div class="section-title">Saúde do Caixa — Próximos 30 dias</div>
   <div class="gauge-card">
     <svg viewBox="0 0 300 195" class="gauge-svg" role="img" aria-label="Arco de progresso da saúde do caixa, de crítico a saudável">
@@ -430,6 +461,13 @@
       <div class="gauge-sub" id="gauge-sub">—</div>
     </div>
   </div>
+  <div class="section-title">Ponto mais baixo do caixa</div>
+  <div class="painel-box" style="margin-bottom:16px">
+    <div class="caixa-min" id="caixa-min-titulo">—</div>
+    <div class="caixa-min-sub" id="caixa-min-sub">—</div>
+    <div class="chart-wrap" style="height:200px"><canvas id="chartCaixa30"></canvas></div>
+  </div>
+
   <div class="section-title">Meta de Vendas do Mês</div>
   <div class="gauge-card">
     <svg viewBox="0 0 300 195" class="gauge-svg" role="img" aria-label="Arco de progresso da meta de vendas do mês, de zero até a meta batida">
@@ -882,6 +920,7 @@ function acaoCobranca(r, tplKey, dias) {
   return `<button class="btn-copy" data-msg="${escMsg}" onclick="copiarMsg(this.dataset.msg)">Copiar msg</button>`;
 }
 let chartPrevisao;
+let chartCaixa30;
 let pendingImport = [];
 let currentUser = null;
 let perfilAssinante = null;
@@ -1346,6 +1385,9 @@ function renderDashboard() {
   document.getElementById('c-liquido').textContent = fmtSgn(liq);
   const cl = document.getElementById('card-liquido');
   cl.className = 'card ' + (liq >= 0 ? 'green' : 'red');
+  renderAgendaSemana();
+  renderAtrasados();
+  renderCaixaMinimo();
   renderGaugeCaixa();
   renderGaugeMeta();
   renderAlertas(saldo, recv30, pag30);
@@ -1355,23 +1397,32 @@ function renderDashboard() {
 // Velocímetro de saúde do caixa: em vez de uma curva pra interpretar, uma
 // leitura de relance — o ponteiro cai no vermelho quanto mais perto (ou já
 // dentro) do caixa negativo, e no verde quanto mais fôlego sobra.
-function renderGaugeCaixa() {
+// Projeção diária do caixa: parte do saldo já realizado (pago) e soma, dia a dia,
+// o que está pendente e vence naquele dia. Só entram lançamentos com vencimento
+// de hoje em diante — o que já venceu e não foi baixado não entra na projeção.
+function projetarCaixa(horizonte) {
   const t = today();
   let acum = 0;
   data.filter(r => r.status === 'pago').forEach(r => { acum += r.tipo === 'receber' ? r.valor : -r.valor; });
   const saldoHoje = acum;
-  const horizonte = 30;
-  let diaNegativo = null;
+  const dias = [];
   for (let i = 0; i < horizonte; i++) {
     const d = addDays(t, i);
-    let ent = 0, sai = 0;
     data.filter(r => r.status !== 'pago' && r.vencimento === d).forEach(r => {
-      if (r.tipo === 'receber') ent += r.valor; else sai += r.valor;
+      acum += r.tipo === 'receber' ? r.valor : -r.valor;
     });
-    acum += ent - sai;
-    if (diaNegativo === null && acum < 0) diaNegativo = i;
+    dias.push({ i, data: d, saldo: acum });
   }
-  const saldoFinal = acum;
+  return { saldoHoje, dias };
+}
+
+function renderGaugeCaixa() {
+  const t = today();
+  const horizonte = 30;
+  const { saldoHoje, dias } = projetarCaixa(horizonte);
+  const negativo = dias.find(x => x.saldo < 0);
+  const diaNegativo = negativo ? negativo.i : null;
+  const saldoFinal = dias[dias.length - 1].saldo;
 
   // fração 0 = já negativo agora (ponteiro no fundo do vermelho)
   // fração 1 = fica positivo os 30 dias inteiros (ponteiro no fundo do verde)
@@ -1484,6 +1535,102 @@ function renderGaugeMeta() {
   tituloEl.textContent = titulo;
   tituloEl.className = 'gauge-title ' + classe;
   document.getElementById('gauge-meta-sub').textContent = sub;
+}
+
+function ddmm(d) { const [, m, dd] = d.split('-'); return `${dd}/${m}`; }
+
+// Tudo que vence hoje e nos próximos 7 dias (a pagar e a receber), pra "o que
+// eu preciso fazer essa semana" sem precisar abrir a aba de Lançamentos.
+function renderAgendaSemana() {
+  const box = document.getElementById('agenda-box');
+  const t = today(), t7 = addDays(t, 7);
+  const itens = data
+    .filter(r => r.status !== 'pago' && r.vencimento && r.vencimento >= t && r.vencimento <= t7)
+    .sort((a, b) => a.vencimento.localeCompare(b.vencimento) || (a.tipo === 'pagar' ? -1 : 1));
+  if (!itens.length) { box.innerHTML = '<div class="ag-vazio">Nada vence nos próximos 7 dias.</div>'; return; }
+  const linha = r => {
+    const quando = r.vencimento === t ? 'Hoje' : r.vencimento === addDays(t, 1) ? 'Amanhã' : ddmm(r.vencimento);
+    const cor = r.tipo === 'receber' ? 'pos' : 'neg';
+    const sinal = r.tipo === 'receber' ? '+' : '−';
+    return `<div class="ag-item">
+      <span class="ag-quando${quando === 'Hoje' ? ' hoje' : ''}">${quando}</span>
+      <span class="ag-desc"><span class="ag-tit">${escapeHtml(r.descricao || '—')}</span><small>${r.tipo === 'receber' ? 'A receber' : 'A pagar'}${r.contraparte ? ' · ' + escapeHtml(r.contraparte) : ''}</small></span>
+      <span class="ag-valor ${cor}">${sinal} ${fmt(r.valor)}</span>
+    </div>`;
+  };
+  const MAX = 8;
+  const totalRec = itens.filter(r => r.tipo === 'receber').reduce((s, r) => s + r.valor, 0);
+  const totalPag = itens.filter(r => r.tipo === 'pagar').reduce((s, r) => s + r.valor, 0);
+  box.innerHTML =
+    `<div class="ag-resumo"><span>Receber <strong style="color:var(--green)">${fmt(totalRec)}</strong></span><span>Pagar <strong style="color:var(--red)">${fmt(totalPag)}</strong></span></div>` +
+    itens.slice(0, MAX).map(linha).join('') +
+    (itens.length > MAX ? `<button class="ag-link" onclick="showTab('lancamentos')">+ ${itens.length - MAX} lançamento(s) — ver todos</button>` : '');
+}
+
+// Contas a receber vencidas e não baixadas, agrupadas por cliente: quem mais
+// deve e há quanto tempo, com atalho pra régua de cobrança.
+function renderAtrasados() {
+  const box = document.getElementById('atrasados-box');
+  const t = today();
+  const vencidos = data.filter(r => r.tipo === 'receber' && r.status !== 'pago' && r.vencimento && r.vencimento < t);
+  if (!vencidos.length) { box.innerHTML = '<div class="ag-vazio">🎉 Nenhum recebimento em atraso.</div>'; return; }
+  const dias = v => Math.round((new Date(t + 'T12:00:00') - new Date(v + 'T12:00:00')) / 86400000);
+  const porCliente = {};
+  vencidos.forEach(r => {
+    const nome = r.contraparte || r.descricao || 'Sem cliente informado';
+    if (!porCliente[nome]) porCliente[nome] = { nome, total: 0, maiorAtraso: 0 };
+    porCliente[nome].total += r.valor;
+    porCliente[nome].maiorAtraso = Math.max(porCliente[nome].maiorAtraso, dias(r.vencimento));
+  });
+  const ranking = Object.values(porCliente).sort((a, b) => b.total - a.total);
+  const total = vencidos.reduce((s, r) => s + r.valor, 0);
+  box.innerHTML =
+    `<div class="ag-resumo"><strong>${fmt(total)}</strong> em atraso · ${vencidos.length} lançamento(s) de ${ranking.length} cliente(s)</div>` +
+    ranking.slice(0, 3).map(c => `<div class="ag-item">
+      <span class="ag-desc"><span class="ag-tit">${escapeHtml(c.nome)}</span><small>${c.maiorAtraso} dia(s) de atraso</small></span>
+      <span class="ag-valor neg">${fmt(c.total)}</span>
+    </div>`).join('') +
+    `<button class="ag-link" onclick="showTab('cobranca')">Abrir régua de cobrança</button>`;
+}
+
+// Menor saldo previsto nos próximos 30 dias e quando acontece: o saldo do fim
+// do período esconde um aperto no meio do mês, e é isso que costuma quebrar o caixa.
+function renderCaixaMinimo() {
+  const horizonte = 30;
+  const { saldoHoje, dias } = projetarCaixa(horizonte);
+  let min = dias[0];
+  dias.forEach(x => { if (x.saldo < min.saldo) min = x; });
+  const tituloEl = document.getElementById('caixa-min-titulo');
+  const subEl = document.getElementById('caixa-min-sub');
+  const quando = min.i === 0 ? 'hoje' : `em ${ddmm(min.data)} (${min.i} dia${min.i > 1 ? 's' : ''})`;
+  const classe = min.saldo < 0 ? 'crit' : (min.saldo < Math.max(0, saldoHoje) * 0.25 ? 'warn' : 'ok');
+  tituloEl.className = 'caixa-min ' + classe;
+  tituloEl.textContent = `Menor saldo previsto: ${fmtSgn(min.saldo)} ${quando}`;
+  subEl.textContent = `Saldo hoje: ${fmtSgn(saldoHoje)}. Considera o que vence de hoje em diante; contas já vencidas e não baixadas não entram.`;
+
+  if (chartCaixa30) chartCaixa30.destroy();
+  const isDark = document.documentElement.getAttribute('data-theme') === 'dark';
+  const tickColor = isDark ? '#7B9DC0' : '#64748B';
+  const gridColor = isDark ? '#1E2F45' : '#E2E8F0';
+  chartCaixa30 = new Chart(document.getElementById('chartCaixa30'), {
+    type: 'line',
+    data: {
+      labels: dias.map(x => ddmm(x.data)),
+      datasets: [{
+        label: 'Saldo previsto', data: dias.map(x => x.saldo), borderColor: '#2563EB', borderWidth: 2,
+        backgroundColor: 'rgba(37,99,235,0.10)', fill: true, tension: 0.2, pointRadius: dias.map(x => x.i === min.i ? 5 : 0),
+        pointBackgroundColor: dias.map(x => x.i === min.i ? (min.saldo < 0 ? '#DC2626' : '#2563EB') : '#2563EB'),
+      }],
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { display: false }, tooltip: { callbacks: { label: ctx => 'Saldo: ' + fmtSgn(ctx.raw) } } },
+      scales: {
+        y: { ticks: { callback: v => (v < 0 ? '-' : '') + fmtCompact(Math.abs(v)), color: tickColor }, grid: { color: ctx => ctx.tick.value === 0 ? '#DC2626' : gridColor } },
+        x: { ticks: { color: tickColor, maxTicksLimit: 8 }, grid: { color: gridColor } },
+      },
+    },
+  });
 }
 
 function renderAlertas(saldo, recv30, pag30) {
