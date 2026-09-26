@@ -391,6 +391,7 @@
     <span class="hd-logado" style="font-size:.78rem;color:var(--text2)">Logado como <strong id="hd-email" style="color:var(--text)"></strong></span>
     <a class="theme-toggle" href="https://wa.me/551152256779?text=Ol%C3%A1!%20Tenho%20uma%20d%C3%BAvida%20sobre%20o%20MeuArgus." target="_blank" rel="noopener" title="Fale conosco">💬</a>
     <button class="theme-toggle" onclick="toggleTheme()" id="theme-toggle-app">🌙</button>
+    <button class="theme-toggle" onclick="abrirModalImportar()" id="btn-integracoes" title="Integrações e importação">🔌</button>
     <button class="theme-toggle" onclick="abrirModalAssinatura()" id="btn-config" title="Minha conta">⚙️</button>
     <button class="btn-logout" onclick="doLogout()">Sair</button>
   </div>
@@ -406,6 +407,10 @@
 
 <!-- PAINEL -->
 <div class="tab active" id="tab-dashboard">
+  <div class="erp-note" id="erp-banner" style="display:none">🔌 <div>
+    <strong>Conecte seu ERP para trazer seus lançamentos automaticamente.</strong>
+    <div style="margin-top:10px"><button class="btn btn-primary" onclick="abrirModalImportar()">Conectar meu ERP</button></div>
+  </div></div>
   <div class="cards">
     <div class="card blue"><label>Saldo Atual (pago)</label><div class="val" id="c-saldo">R$ 0</div></div>
     <div class="card green"><label>A Receber (próx. 30d)</label><div class="val" id="c-receber">R$ 0</div></div>
@@ -1121,7 +1126,7 @@ function abrirModalAssinatura() {
 }
 function fecharModalAssinatura() { document.getElementById('modal-assinatura').classList.remove('open'); }
 
-function abrirModalImportar() { document.getElementById('modal-importar').classList.add('open'); }
+function abrirModalImportar() { renderErpLista(); document.getElementById('modal-importar').classList.add('open'); }
 function fecharModalImportar() { document.getElementById('modal-importar').classList.remove('open'); }
 
 async function carregarDadosPessoais() {
@@ -2273,7 +2278,7 @@ async function downloadTemplate() {
 // (falta cadastrar o app em cada plataforma). Omie não usa OAuth2 — conecta
 // direto com App Key/Secret.
 const ERP_PROVIDERS = {
-  bling:      { label: 'Bling',      authType: 'oauth2', clientId: '2e668bfee063e06f76a1b648a71b94339b3f6b92', authorizeUrl: 'https://www.bling.com.br/Api/v3/oauth/authorize' },
+  bling:      { label: 'Bling',      authType: 'oauth2', clientId: 'acd71403a8266b456faa3457870ba113292267a1', authorizeUrl: 'https://www.bling.com.br/Api/v3/oauth/authorize' },
   contaazul:  { label: 'Conta Azul', authType: 'oauth2', clientId: null, authorizeUrl: 'https://api.contaazul.com/auth/authorize' },
   quickbooks: { label: 'QuickBooks', authType: 'oauth2', clientId: null, authorizeUrl: 'https://appcenter.intuit.com/connect/oauth2' },
   omie:       { label: 'Omie',       authType: 'apikey', credentialFields: [
@@ -2288,6 +2293,7 @@ const ERP_PROVIDERS = {
   ]},
 };
 let erpStatusAtual = {};
+let erpStatusCarregado = false;
 let apikeyProviderAtual = null;
 
 async function erpAuthHeader() {
@@ -2401,12 +2407,13 @@ function conectarERP(provider) {
 async function checkErpStatus() {
   try {
     const resp = await fetch('/api/erp/status', { headers: await erpAuthHeader() });
-    if (!resp.ok) return;
+    if (!resp.ok) { renderErpLista(); return; }
     const data = await resp.json();
     erpStatusAtual = {};
     (data.integracoes || []).forEach(i => { erpStatusAtual[i.provider] = i; });
+    erpStatusCarregado = true;
     renderErpLista();
-  } catch (e) { /* silencioso: integração é opcional */ }
+  } catch (e) { renderErpLista(); }
 }
 
 // Mantém os lançamentos do ERP em dia sem depender do usuário lembrar de
@@ -2464,6 +2471,7 @@ function renderCartaoErp(key, cfg) {
 // realmente precisa clica pra ver as outras opções.
 function renderErpLista() {
   const box = document.getElementById('erp-lista');
+  document.getElementById('erp-banner').style.display = erpStatusCarregado && !Object.keys(erpStatusAtual).length ? 'flex' : 'none';
   const conectadoKey = Object.keys(erpStatusAtual)[0] || null;
   const preferido = localStorage.getItem('meuargus_erp_preferido');
   const destaqueKey = conectadoKey || (preferido && ERP_PROVIDERS[preferido] ? preferido : null);
