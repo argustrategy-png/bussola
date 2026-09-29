@@ -525,6 +525,37 @@
 
   <div class="divider"></div>
 
+  <div class="section-title">Posição de caixa — Caixas e Bancos</div>
+  <p class="section-sub">Digite o saldo de cada conta que aparece em <strong>Caixas e Bancos</strong> no Bling (Caixa, Itaú, Nubank, C6 Flutu, contas Wise por moeda...). Contas em moeda estrangeira convertem pra R$ pela cotação do dia do Banco Central. Não é sincronizado automaticamente — atualize quando quiser conferir a posição.</p>
+  <div class="param-row">
+    <label>Moeda
+      <select id="saldo-moeda">
+        <option value="BRL">BRL — Real</option>
+        <option value="USD">USD — Dólar</option>
+        <option value="EUR">EUR — Euro</option>
+        <option value="GBP">GBP — Libra</option>
+        <option value="CAD">CAD — Dólar canadense</option>
+        <option value="DKK">DKK — Coroa dinamarquesa</option>
+      </select>
+    </label>
+    <label>Conta <span class="hint" style="text-transform:none">(opcional, ex.: "Wise USD")</span>
+      <input type="text" id="saldo-nome" placeholder="Nome da conta">
+    </label>
+    <label>Saldo
+      <input type="number" step="0.01" id="saldo-valor" placeholder="0,00">
+    </label>
+    <button class="btn btn-primary" onclick="adicionarSaldoMoeda()">Adicionar</button>
+  </div>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Conta</th><th>Moeda</th><th>Saldo</th><th>Câmbio (Bacen)</th><th>Em R$</th><th></th></tr></thead>
+      <tbody id="tb-saldos-moeda"></tbody>
+      <tfoot><tr><td colspan="4" style="text-align:right;font-weight:700">Total em R$</td><td id="saldo-moeda-total" style="font-weight:700">R$ 0,00</td><td></td></tr></tfoot>
+    </table>
+  </div>
+
+  <div class="divider"></div>
+
   <div class="hero">
     <h2>💡 Insights de Gestão</h2>
     <p>Leitura automática dos seus números, organizada por área de análise — como se três especialistas olhassem seus dados: rentabilidade, caixa e custo de capital. Hoje é uma análise baseada em regras financeiras; a estrutura já está pronta para plugar agentes de IA especializados no futuro.</p>
@@ -1680,11 +1711,97 @@ function calcIndicadores() {
   return { receitasPagas, ctvPago, doPago, despesasTotais, LL, margem, saldo, recv30, pag30, liquidez, capGiro, folego };
 }
 
+// ── Posição de caixa (Caixas e Bancos) — digitada, não sincronizada ────────
+// O Bling não expõe saldo de conta financeira pela API (só o histórico de
+// movimentações, confirmado no schema inteiro da API), então cada conta é
+// digitada aqui manualmente, do jeito que aparece na tela "Caixas e Bancos"
+// do Bling. Só a conversão pra R$ das moedas estrangeiras é automática, via
+// cotação do dia do Banco Central (PTAX/Olinda, cacheada por moeda+dia).
+async function buscarCotacaoBacen(moeda) {
+  if (moeda === 'BRL') return { moeda: 'BRL', data: today(), taxa: 1, boletim: null };
+  const hoje = new Date();
+  for (let voltar = 0; voltar <= 8; voltar++) {
+    const d = new Date(hoje); d.setDate(d.getDate() - voltar);
+    const chaveISO = d.toISOString().split('T')[0];
+    const chaveCache = `meuargus_cambio_${moeda}_${chaveISO}`;
+    const cacheado = localStorage.getItem(chaveCache);
+    if (cacheado) { try { return JSON.parse(cacheado); } catch { /* ignora cache corrompido */ } }
+    const mmddyyyy = `${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}-${d.getFullYear()}`;
+    const url = `https://olinda.bcb.gov.br/olinda/servico/PTAX/versao/v1/odata/CotacaoMoedaDia(moeda=@moeda,dataCotacao=@dataCotacao)?@moeda='${moeda}'&@dataCotacao='${mmddyyyy}'&$format=json`;
+    try {
+      const resp = await fetch(url);
+      if (!resp.ok) continue;
+      const json = await resp.json();
+      const ultimo = (json.value || []).slice(-1)[0];
+      if (!ultimo) continue; // sem boletim nesse dia (fim de semana/feriado) — tenta o dia anterior
+      const resultado = { moeda, data: chaveISO, taxa: (ultimo.cotacaoCompra + ultimo.cotacaoVenda) / 2, boletim: ultimo.tipoBoletim };
+      localStorage.setItem(chaveCache, JSON.stringify(resultado));
+      return resultado;
+    } catch (e) { /* rede fora do ar — tenta o dia anterior */ }
+  }
+  return null;
+}
+
+function getSaldosMoeda() {
+  try { return JSON.parse(localStorage.getItem('meuargus_saldos_moeda') || '[]'); }
+  catch { return []; }
+}
+function setSaldosMoeda(lista) { localStorage.setItem('meuargus_saldos_moeda', JSON.stringify(lista)); }
+
+function adicionarSaldoMoeda() {
+  const moeda = document.getElementById('saldo-moeda').value;
+  const nome = document.getElementById('saldo-nome').value.trim();
+  const valor = parseFloat(document.getElementById('saldo-valor').value);
+  if (isNaN(valor)) { showSync('Informe o saldo ✗', true); return; }
+  const lista = getSaldosMoeda();
+  lista.push({ id: uid(), moeda, nome, valor });
+  setSaldosMoeda(lista);
+  document.getElementById('saldo-nome').value = '';
+  document.getElementById('saldo-valor').value = '';
+  renderSaldosMoeda();
+}
+function removerSaldoMoeda(id) {
+  setSaldosMoeda(getSaldosMoeda().filter(s => s.id !== id));
+  renderSaldosMoeda();
+}
+
+async function renderSaldosMoeda() {
+  const tb = document.getElementById('tb-saldos-moeda');
+  if (!tb) return;
+  const lista = getSaldosMoeda();
+  if (!lista.length) {
+    tb.innerHTML = '<tr><td colspan="6" class="empty">Nenhuma conta adicionada ainda.</td></tr>';
+    document.getElementById('saldo-moeda-total').textContent = fmt(0);
+    return;
+  }
+  const moedasUnicas = [...new Set(lista.map(s => s.moeda))];
+  const cotacoes = {};
+  await Promise.all(moedasUnicas.map(async (m) => { cotacoes[m] = await buscarCotacaoBacen(m); }));
+
+  let total = 0;
+  tb.innerHTML = lista.map(s => {
+    const cot = cotacoes[s.moeda];
+    const valorR = cot ? s.valor * cot.taxa : null;
+    if (valorR !== null) total += valorR;
+    const cambioTxt = s.moeda === 'BRL' ? '—' : (cot ? `1 ${s.moeda} = ${cot.taxa.toLocaleString('pt-BR',{minimumFractionDigits:4,maximumFractionDigits:4})} (${fmtDate(cot.data)})` : 'cotação indisponível');
+    return `<tr>
+      <td>${escapeHtml(s.nome || '—')}</td>
+      <td>${s.moeda}</td>
+      <td>${s.valor.toLocaleString('pt-BR',{minimumFractionDigits:2,maximumFractionDigits:2})}</td>
+      <td>${cambioTxt}</td>
+      <td>${valorR !== null ? fmt(valorR) : '—'}</td>
+      <td><button class="btn btn-danger" onclick="removerSaldoMoeda('${s.id}')">✕</button></td>
+    </tr>`;
+  }).join('');
+  document.getElementById('saldo-moeda-total').textContent = fmt(total);
+}
+
 function renderIndicadores() {
   const k = calcIndicadores();
 
   document.getElementById('k-receita').textContent = fmt(k.receitasPagas);
   document.getElementById('k-capgiro').textContent = fmt(k.capGiro);
+  renderSaldosMoeda();
 
   const folegoEl = document.getElementById('k-folego');
   const folegoCard = document.getElementById('k-card-folego');
