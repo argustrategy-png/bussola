@@ -15,9 +15,11 @@ import {
 
 // Teto de contatos novos buscados por sincronização — o resto fica com o
 // placeholder "Contato Bling #id" nesta rodada e é resolvido nas próximas
-// (o cache é cumulativo), pra não estourar o tempo da function num primeiro
-// sync de uma conta com muitos contatos distintos.
-const MAX_CONTATOS_NOVOS_POR_SYNC = 200;
+// (o cache é cumulativo). Busca é sequencial e espaçada pra respeitar o
+// limite de taxa do Bling (~350ms por contato), então o teto também existe
+// pra sobrar tempo pras outras etapas do sync dentro do limite da function
+// (120 contatos ≈ 42s, deixando folga dentro dos 60s configurados).
+const MAX_CONTATOS_NOVOS_POR_SYNC = 120;
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'method_not_allowed' });

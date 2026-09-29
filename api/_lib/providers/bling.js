@@ -16,7 +16,11 @@ const MAX_PAGINAS = 20;
 // e, combinado com outras chamadas da mesma sincronização, passam do limite
 // mais de uma vez; uma só tentativa extra não bastava (visto em produção).
 async function getComRetry429(url, accessToken, tentativa = 0) {
-  const MAX_TENTATIVAS = 4;
+  // Só 2 tentativas extras: as chamadas já são espaçadas na origem (contas
+  // pagina sequencial; fetchContatoNomes com ESPACO_MS entre cada uma), então
+  // um 429 aqui é a exceção, não a regra — não vale gastar muito do teto de
+  // tempo da function retentando algo que provavelmente já vai passar.
+  const MAX_TENTATIVAS = 2;
   const resp = await fetch(url, { headers: { Authorization: `Bearer ${accessToken}`, Accept: 'application/json' } });
   if (resp.status === 429 && tentativa < MAX_TENTATIVAS) {
     await new Promise((r) => setTimeout(r, 1000 * (tentativa + 1)));
@@ -127,21 +131,22 @@ export const bling = {
     };
   },
 
-  // Nome dos contatos por ID, em lotes pequenos (mesmo padrão de
-  // fetchItensVenda). `ids` já vem filtrado pelo chamador (sync.js) só com os
-  // que faltam no cache — aqui não sabemos o que já foi buscado antes.
+  // Nome dos contatos por ID. Sequencial, uma chamada de cada vez, com um
+  // espaço mínimo entre elas — 5 em paralelo (a versão anterior) disparava
+  // rajada contra o limite de 3 req/s do Bling e quase todas voltavam 429,
+  // deixando a conta inteira sem nenhum nome resolvido (visto em produção:
+  // 0 contatos cacheados pro Bruno). `ids` já vem filtrado pelo chamador
+  // (sync.js) só com os que faltam no cache.
   async fetchContatoNomes({ accessToken }, ids) {
-    const LOTE = 5;
+    const ESPACO_MS = 350; // ~2,8 req/s, com margem sob o limite de 3 req/s
     const resultado = {};
-    for (let i = 0; i < ids.length; i += LOTE) {
-      const lote = ids.slice(i, i + LOTE);
-      const respostas = await Promise.all(lote.map(async (id) => {
-        const r = await getComRetry429(`${API_BASE}/contatos/${id}`, accessToken);
-        if (!r.ok) return null;
-        const dados = (await r.json())?.data;
-        return dados?.nome ? { id, nome: dados.nome } : null;
-      }));
-      respostas.filter(Boolean).forEach(({ id, nome }) => { resultado[id] = nome; });
+    for (let i = 0; i < ids.length; i++) {
+      if (i > 0) await new Promise((r) => setTimeout(r, ESPACO_MS));
+      const id = ids[i];
+      const r = await getComRetry429(`${API_BASE}/contatos/${id}`, accessToken);
+      if (!r.ok) continue;
+      const dados = (await r.json())?.data;
+      if (dados?.nome) resultado[id] = dados.nome;
     }
     return resultado;
   },
