@@ -13,15 +13,19 @@ import {
   upsertContatosCache,
 } from '../_lib/supabase.js';
 
-// Teto de contatos novos buscados por sincronização — o resto fica com o
-// placeholder "Contato Bling #id" nesta rodada e é resolvido nas próximas
-// (o cache é cumulativo). Busca é sequencial e espaçada pra respeitar o
-// limite de taxa do Bling (~350ms por contato), então o teto também existe
-// pra sobrar tempo pras outras etapas do sync dentro do limite da function
-// (120 contatos ≈ 42s, deixando folga dentro dos 60s configurados).
-const MAX_CONTATOS_NOVOS_POR_SYNC = 120;
+// Orçamento de tempo pra resolver nomes de contato novos, não um número fixo
+// de contatos: a busca é sequencial e espaçada (~350ms cada, pra respeitar o
+// limite de taxa do Bling), e o que sobra de tempo depois de buscar as contas
+// varia por conta (histórico grande pagina mais). Um teto fixo alto (120)
+// somado ao tempo das etapas seguintes (gravar lançamentos, produtos, itens
+// de venda) já estourou os 60s da function em produção. Com orçamento de
+// tempo, para no meio da lista se precisar — o que já foi resolvido fica no
+// cache, e o resto entra na próxima sincronização.
+const ORCAMENTO_CONTATOS_MS = 20_000;
+const MAX_CONTATOS_CANDIDATOS = 400; // teto só pra não montar um array enorme à toa
 
 export default async function handler(req, res) {
+  const inicioHandler = Date.now();
   if (req.method !== 'POST') return res.status(405).json({ error: 'method_not_allowed' });
 
   const { provider: providerName } = req.body || {};
@@ -79,10 +83,10 @@ export default async function handler(req, res) {
         )];
         if (idsUnicos.length) {
           const cache = await getContatosCache(subscriberId, providerName, idsUnicos);
-          const faltantes = idsUnicos.filter((id) => !cache[id]).slice(0, MAX_CONTATOS_NOVOS_POR_SYNC);
+          const faltantes = idsUnicos.filter((id) => !cache[id]).slice(0, MAX_CONTATOS_CANDIDATOS);
           let novos = {};
           if (faltantes.length) {
-            novos = await provider.fetchContatoNomes(ctx, faltantes);
+            novos = await provider.fetchContatoNomes(ctx, faltantes, inicioHandler + ORCAMENTO_CONTATOS_MS);
             const registros = Object.entries(novos).map(([contatoErpId, nome]) => ({
               subscriber_id: subscriberId, provider: providerName, contato_erp_id: contatoErpId, nome,
             }));

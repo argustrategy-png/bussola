@@ -137,10 +137,16 @@ export const bling = {
   // deixando a conta inteira sem nenhum nome resolvido (visto em produção:
   // 0 contatos cacheados pro Bruno). `ids` já vem filtrado pelo chamador
   // (sync.js) só com os que faltam no cache.
-  async fetchContatoNomes({ accessToken }, ids) {
+  //
+  // `deadline` (timestamp em ms, opcional) pára a busca no meio da lista se o
+  // tempo acabar, em vez de estourar o limite da function — cada contato só
+  // entra no resultado (e no cache) depois de resolvido, então parar no meio
+  // não perde nada do que já foi feito; o resto fica pra próxima sincronização.
+  async fetchContatoNomes({ accessToken }, ids, deadline) {
     const ESPACO_MS = 350; // ~2,8 req/s, com margem sob o limite de 3 req/s
     const resultado = {};
     for (let i = 0; i < ids.length; i++) {
+      if (deadline && Date.now() >= deadline) break;
       if (i > 0) await new Promise((r) => setTimeout(r, ESPACO_MS));
       const id = ids[i];
       const r = await getComRetry429(`${API_BASE}/contatos/${id}`, accessToken);
