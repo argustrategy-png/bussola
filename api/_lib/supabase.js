@@ -95,3 +95,28 @@ export async function upsertVendasItens(itens) {
     body: JSON.stringify(itens),
   });
 }
+
+// Cache de nome de contato por ID do ERP (ver supabase-migration-contatos.sql)
+// — evita rebuscar o mesmo contato a cada sincronização.
+export async function getContatosCache(subscriberId, provider, ids) {
+  if (!ids.length) return {};
+  const idsParam = ids.map((id) => encodeURIComponent(id)).join(',');
+  const resp = await fetch(
+    `${process.env.SUPABASE_URL}/rest/v1/contatos_cache?subscriber_id=eq.${subscriberId}&provider=eq.${provider}&contato_erp_id=in.(${idsParam})&select=contato_erp_id,nome`,
+    { headers: serviceHeaders() }
+  );
+  if (!resp.ok) return {};
+  const rows = await resp.json();
+  const mapa = {};
+  (rows || []).forEach((r) => { mapa[r.contato_erp_id] = r.nome; });
+  return mapa;
+}
+
+export async function upsertContatosCache(registros) {
+  if (!registros.length) return { ok: true };
+  return fetch(`${process.env.SUPABASE_URL}/rest/v1/contatos_cache?on_conflict=subscriber_id,provider,contato_erp_id`, {
+    method: 'POST',
+    headers: serviceHeaders({ 'Content-Type': 'application/json', Prefer: 'resolution=merge-duplicates' }),
+    body: JSON.stringify(registros),
+  });
+}

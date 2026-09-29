@@ -20,6 +20,9 @@
   "functions": {
     "api/admin/user-action.js": {
       "maxDuration": 30
+    },
+    "api/erp/sync.js": {
+      "maxDuration": 60
     }
   }
 }

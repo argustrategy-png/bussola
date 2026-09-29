@@ -11,18 +11,24 @@ const POR_PAGINA = 100;
 // a 3 requisições por segundo, então não dá pra puxar histórico infinito.
 const MAX_PAGINAS = 20;
 
+// GET simples com uma nova tentativa em 429 (limite de taxa do Bling).
+async function getComRetry429(url, accessToken) {
+  const init = { headers: { Authorization: `Bearer ${accessToken}`, Accept: 'application/json' } };
+  let resp = await fetch(url, init);
+  if (resp.status === 429) {
+    await new Promise((r) => setTimeout(r, 1200));
+    resp = await fetch(url, init);
+  }
+  return resp;
+}
+
 // Percorre todas as páginas de uma listagem do Bling (pagina=1,2,...) até vir
-// uma página incompleta. Uma nova tentativa em 429 (limite de taxa) por página.
+// uma página incompleta.
 async function fetchTodasPaginas(caminho, accessToken, rotulo) {
   const todos = [];
   for (let pagina = 1; pagina <= MAX_PAGINAS; pagina++) {
     const url = `${API_BASE}${caminho}${caminho.includes('?') ? '&' : '?'}pagina=${pagina}&limite=${POR_PAGINA}`;
-    const init = { headers: { Authorization: `Bearer ${accessToken}`, Accept: 'application/json' } };
-    let resp = await fetch(url, init);
-    if (resp.status === 429) {
-      await new Promise((r) => setTimeout(r, 1200));
-      resp = await fetch(url, init);
-    }
+    const resp = await getComRetry429(url, accessToken);
     if (!resp.ok) throw new Error(`Bling ${rotulo} falhou: ${resp.status} ${await resp.text()}`);
     const itens = (await resp.json())?.data || [];
     todos.push(...itens);
@@ -93,12 +99,14 @@ export const bling = {
 
   // Confirmado contra o OpenAPI oficial do Bling (ContasDadosBaseDTO): a
   // listagem só traz id/situacao/vencimento/valor/contato.id — sem nome do
-  // contato, categoria ou histórico. Pra trazer o nome do contato seria
-  // preciso um GET /contatos/{id} por lançamento (não implementado ainda,
-  // por custo de N chamadas extra por sincronização).
-  mapConta(conta, tipo, subscriberId) {
+  // contato, categoria ou histórico. O nome vem à parte via fetchContatoNomes
+  // (um GET /contatos/{id} por contato, cacheado em contatos_cache — ver
+  // sync.js), e chega aqui pronto em `contatosMap` (id → nome).
+  mapConta(conta, tipo, subscriberId, contatosMap = {}) {
     // situacao: 1 Aberto, 2 Pago, 3 Parcial, 4 Devolvido, 5 Cancelado, 6 Devolvido parcial, 7 Confirmado
     const status = conta.situacao === 2 ? 'pago' : 'pendente';
+    const contatoId = conta.contato?.id;
+    const nomeContato = contatoId ? contatosMap[String(contatoId)] : null;
     return {
       subscriber_id: subscriberId,
       tipo,
@@ -110,10 +118,29 @@ export const bling = {
       recorrencia: 'none',
       toc: tipo === 'pagar' ? 'do' : 'na',
       origem: 'erp',
-      contraparte: conta.contato?.id ? `Contato Bling #${conta.contato.id}` : null,
+      contraparte: nomeContato || (contatoId ? `Contato Bling #${contatoId}` : null),
       contraparte_telefone: null,
       erp_id: `bling:${conta.id}`,
     };
+  },
+
+  // Nome dos contatos por ID, em lotes pequenos (mesmo padrão de
+  // fetchItensVenda). `ids` já vem filtrado pelo chamador (sync.js) só com os
+  // que faltam no cache — aqui não sabemos o que já foi buscado antes.
+  async fetchContatoNomes({ accessToken }, ids) {
+    const LOTE = 5;
+    const resultado = {};
+    for (let i = 0; i < ids.length; i += LOTE) {
+      const lote = ids.slice(i, i + LOTE);
+      const respostas = await Promise.all(lote.map(async (id) => {
+        const r = await getComRetry429(`${API_BASE}/contatos/${id}`, accessToken);
+        if (!r.ok) return null;
+        const dados = (await r.json())?.data;
+        return dados?.nome ? { id, nome: dados.nome } : null;
+      }));
+      respostas.filter(Boolean).forEach(({ id, nome }) => { resultado[id] = nome; });
+    }
+    return resultado;
   },
 
   // Posição de estoque: confirmado contra o wrapper open-source

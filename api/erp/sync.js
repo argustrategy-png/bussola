@@ -9,7 +9,15 @@ import {
   upsertLancamentos,
   upsertProdutos,
   upsertVendasItens,
+  getContatosCache,
+  upsertContatosCache,
 } from '../_lib/supabase.js';
+
+// Teto de contatos novos buscados por sincronização — o resto fica com o
+// placeholder "Contato Bling #id" nesta rodada e é resolvido nas próximas
+// (o cache é cumulativo), pra não estourar o tempo da function num primeiro
+// sync de uma conta com muitos contatos distintos.
+const MAX_CONTATOS_NOVOS_POR_SYNC = 200;
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'method_not_allowed' });
@@ -56,9 +64,37 @@ export default async function handler(req, res) {
       provider.fetchContas({ ...ctx, tipo: 'receber' }),
     ]);
 
+    // Nome do contato: alguns providers (hoje só Bling) não trazem o nome já
+    // na listagem de contas, só o ID — busca à parte, cacheada, pra não achar
+    // "Contato Bling #123" em vez do nome do cliente/fornecedor no painel.
+    let contatosMap = {};
+    if (typeof provider.fetchContatoNomes === 'function') {
+      try {
+        const idsUnicos = [...new Set(
+          [...pagar, ...receber].map((c) => c.contato?.id).filter(Boolean).map(String)
+        )];
+        if (idsUnicos.length) {
+          const cache = await getContatosCache(subscriberId, providerName, idsUnicos);
+          const faltantes = idsUnicos.filter((id) => !cache[id]).slice(0, MAX_CONTATOS_NOVOS_POR_SYNC);
+          let novos = {};
+          if (faltantes.length) {
+            novos = await provider.fetchContatoNomes(ctx, faltantes);
+            const registros = Object.entries(novos).map(([contatoErpId, nome]) => ({
+              subscriber_id: subscriberId, provider: providerName, contato_erp_id: contatoErpId, nome,
+            }));
+            const r = await upsertContatosCache(registros);
+            if (!r.ok) console.error(`${providerName} sync contatos: falha ao gravar cache`, await r.text());
+          }
+          contatosMap = { ...cache, ...novos };
+        }
+      } catch (err) {
+        console.error(`${providerName} sync contatos error`, err);
+      }
+    }
+
     const lancamentos = [
-      ...pagar.map((c) => provider.mapConta(c, 'pagar', subscriberId)),
-      ...receber.map((c) => provider.mapConta(c, 'receber', subscriberId)),
+      ...pagar.map((c) => provider.mapConta(c, 'pagar', subscriberId, contatosMap)),
+      ...receber.map((c) => provider.mapConta(c, 'receber', subscriberId, contatosMap)),
     ];
 
     let gravados = 0;
