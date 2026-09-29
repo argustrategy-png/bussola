@@ -13,15 +13,16 @@ import {
   upsertContatosCache,
 } from '../_lib/supabase.js';
 
-// Orçamento de tempo pra resolver nomes de contato novos, não um número fixo
-// de contatos: a busca é sequencial e espaçada (~350ms cada, pra respeitar o
-// limite de taxa do Bling), e o que sobra de tempo depois de buscar as contas
-// varia por conta (histórico grande pagina mais). Um teto fixo alto (120)
-// somado ao tempo das etapas seguintes (gravar lançamentos, produtos, itens
-// de venda) já estourou os 60s da function em produção. Com orçamento de
-// tempo, para no meio da lista se precisar — o que já foi resolvido fica no
-// cache, e o resto entra na próxima sincronização.
-const ORCAMENTO_CONTATOS_MS = 20_000;
+// Orçamento de tempo pra resolver nomes de contato novos, calculado com o que
+// *sobra* depois de buscar as contas — não um número fixo a partir do início
+// da function. Um orçamento fixo (testado: 20s a partir do início) ignorava
+// que buscar as contas sozinho já podia consumir esse tempo todo em contas
+// com bastante histórico (visto em produção: 0 contatos resolvidos mesmo após
+// vários syncs OK, porque a etapa de contatos nunca chegava a rodar). Reserva
+// tempo pras etapas seguintes (gravar lançamentos, produtos, itens de venda,
+// marcar sincronizado) pra não estourar os 60s da function.
+const LIMITE_FUNCTION_MS = 58_000; // margem sob o teto real de 60s
+const RESERVA_POS_CONTATOS_MS = 15_000;
 const MAX_CONTATOS_CANDIDATOS = 400; // teto só pra não montar um array enorme à toa
 
 export default async function handler(req, res) {
@@ -71,6 +72,7 @@ export default async function handler(req, res) {
     // de contas com bastante histórico.
     const pagar = await provider.fetchContas({ ...ctx, tipo: 'pagar' });
     const receber = await provider.fetchContas({ ...ctx, tipo: 'receber' });
+    console.log(`${providerName} sync: contas levaram ${Date.now() - inicioHandler}ms (pagar ${pagar.length}, receber ${receber.length})`);
 
     // Nome do contato: alguns providers (hoje só Bling) não trazem o nome já
     // na listagem de contas, só o ID — busca à parte, cacheada, pra não achar
@@ -86,7 +88,9 @@ export default async function handler(req, res) {
           const faltantes = idsUnicos.filter((id) => !cache[id]).slice(0, MAX_CONTATOS_CANDIDATOS);
           let novos = {};
           if (faltantes.length) {
-            novos = await provider.fetchContatoNomes(ctx, faltantes, inicioHandler + ORCAMENTO_CONTATOS_MS);
+            const orcamentoContatos = Math.max(0, LIMITE_FUNCTION_MS - (Date.now() - inicioHandler) - RESERVA_POS_CONTATOS_MS);
+            novos = await provider.fetchContatoNomes(ctx, faltantes, Date.now() + orcamentoContatos);
+            console.log(`${providerName} sync: orçamento contatos ${orcamentoContatos}ms, resolvidos ${Object.keys(novos).length}/${faltantes.length} (${idsUnicos.length} contatos distintos no total)`);
             const registros = Object.entries(novos).map(([contatoErpId, nome]) => ({
               subscriber_id: subscriberId, provider: providerName, contato_erp_id: contatoErpId, nome,
             }));

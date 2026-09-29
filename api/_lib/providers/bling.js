@@ -32,8 +32,10 @@ async function getComRetry429(url, accessToken, tentativa = 0) {
 // Percorre todas as páginas de uma listagem do Bling (pagina=1,2,...) até vir
 // uma página incompleta.
 async function fetchTodasPaginas(caminho, accessToken, rotulo) {
+  const ESPACO_ENTRE_PAGINAS_MS = 200; // sob o limite de 3 req/s, com margem
   const todos = [];
   for (let pagina = 1; pagina <= MAX_PAGINAS; pagina++) {
+    if (pagina > 1) await new Promise((r) => setTimeout(r, ESPACO_ENTRE_PAGINAS_MS));
     const url = `${API_BASE}${caminho}${caminho.includes('?') ? '&' : '?'}pagina=${pagina}&limite=${POR_PAGINA}`;
     const resp = await getComRetry429(url, accessToken);
     if (!resp.ok) throw new Error(`Bling ${rotulo} falhou: ${resp.status} ${await resp.text()}`);
