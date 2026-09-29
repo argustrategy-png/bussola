@@ -74,6 +74,12 @@ async function sincronizarPosicaoCaixa(inicioHandler, subscriberId, providerName
   let maiorData = estado.maiorData;
   let concluido = false;
 
+  // Diagnóstico: contagem e soma separadas de C e D por conta, pra investigar
+  // discrepância vista em produção (Wise CAD e Wise USD bem acima do saldo
+  // real do Bling — suspeita de transferência entre contas Wise contada só
+  // do lado do crédito, sem o débito correspondente baixar o saldo).
+  const diagnostico = estado.diagnostico || {};
+
   while (Date.now() - inicioHandler < LIMITE_MS) {
     if (pagina > 1) await new Promise((r) => setTimeout(r, ESPACO_PAGINAS_MS));
     const registros = await provider.fetchPaginaCaixas(ctx, { dataInicial: estado.dataInicial, dataFinal: dataFinalHoje, pagina });
@@ -81,11 +87,17 @@ async function sincronizarPosicaoCaixa(inicioHandler, subscriberId, providerName
     for (const r of registros) {
       const contaId = String(r.contaFinanceira?.id ?? 'sem_conta');
       const descricao = r.contaFinanceira?.descricao || 'Conta sem nome';
+      const valorNum = Number(r.valor) || 0;
       const sinal = r.debCred === 'C' ? 1 : -1;
       if (!acumulado[contaId]) acumulado[contaId] = { descricao, soma: 0 };
       acumulado[contaId].descricao = descricao;
-      acumulado[contaId].soma += sinal * (Number(r.valor) || 0);
+      acumulado[contaId].soma += sinal * valorNum;
       if (!maiorData || r.data > maiorData) maiorData = r.data;
+
+      if (!diagnostico[contaId]) diagnostico[contaId] = { descricao, qtdC: 0, somaC: 0, qtdD: 0, somaD: 0, amostra: [] };
+      const d = diagnostico[contaId];
+      if (r.debCred === 'C') { d.qtdC++; d.somaC += valorNum; } else { d.qtdD++; d.somaD += valorNum; }
+      if (d.amostra.length < 5) d.amostra.push({ id: r.id, data: r.data, debCred: r.debCred, valor: valorNum, descricao: r.descricao, origem: r.origem });
     }
     pagina++;
   }
@@ -103,10 +115,14 @@ async function sincronizarPosicaoCaixa(inicioHandler, subscriberId, providerName
     const r = await upsertSaldosCaixas(registros);
     if (!r.ok) throw new Error(`Falha ao gravar posição de caixa: ${await r.text()}`);
     await deleteSyncEstado(subscriberId, providerName, 'posicao_caixa');
+    for (const [contaId, d] of Object.entries(diagnostico)) {
+      if (!/wise/i.test(d.descricao)) continue;
+      console.log(`posicao_caixa diagnostico [${d.descricao} / conta ${contaId}]: C: ${d.qtdC}x somando ${d.somaC.toFixed(2)} | D: ${d.qtdD}x somando ${d.somaD.toFixed(2)} | líquido: ${(d.somaC - d.somaD).toFixed(2)} | amostra:`, JSON.stringify(d.amostra));
+    }
     return { ok: true, concluido: true, contas: registros.length };
   }
 
-  await saveSyncEstado(subscriberId, providerName, 'posicao_caixa', { pagina, dataInicial: estado.dataInicial, acumulado, maiorData });
+  await saveSyncEstado(subscriberId, providerName, 'posicao_caixa', { pagina, dataInicial: estado.dataInicial, acumulado, maiorData, diagnostico });
   return { ok: true, concluido: false, paginaAtual: pagina };
 }
 
