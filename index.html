@@ -892,6 +892,14 @@ function toggleTheme() {
 
 // ─── STATE ───────────────────────────────────────────────
 let data = [];
+// Saldo real, calculado a partir da posição de caixa (soma de todas as
+// contas de Caixas e Bancos do Bling, convertida pra R$) — substitui a soma
+// ingênua de "tudo que já foi pago" (que não tem como bater com o saldo de
+// verdade: mistura moeda estrangeira como se fosse R$ e nunca teve um saldo
+// inicial). null enquanto não há posição de caixa calculada pra essa conta
+// (ex.: sem Bling conectado) — nesse caso os cálculos caem de volta pra soma
+// antiga, melhor que nada.
+let saldoRealCalculado = null;
 let paramsState = JSON.parse(localStorage.getItem('meuargus_params') || '{"selic":10.75,"cartao":3.5,"margem":null,"metaMargem":25}');
 if (paramsState.metaMargem === undefined) paramsState.metaMargem = 25;
 const TEMPLATES_PADRAO = {
@@ -1389,8 +1397,11 @@ function mesesDistintosPagos() {
 // ─── PAINEL ──────────────────────────────────────────────
 function renderDashboard() {
   const t = today(), t30 = addDays(t, 30);
-  let saldo = 0, recv30 = 0, pag30 = 0;
-  data.filter(r => r.status === 'pago').forEach(r => { saldo += r.tipo === 'receber' ? r.valor : -r.valor; });
+  let saldo = saldoRealCalculado, recv30 = 0, pag30 = 0;
+  if (saldo === null) {
+    saldo = 0;
+    data.filter(r => r.status === 'pago').forEach(r => { saldo += r.tipo === 'receber' ? r.valor : -r.valor; });
+  }
   data.filter(r => r.status !== 'pago' && r.vencimento >= t && r.vencimento <= t30).forEach(r => {
     if (r.tipo === 'receber') recv30 += r.valor; else pag30 += r.valor;
   });
@@ -1418,8 +1429,11 @@ function renderDashboard() {
 // de hoje em diante — o que já venceu e não foi baixado não entra na projeção.
 function projetarCaixa(horizonte) {
   const t = today();
-  let acum = 0;
-  data.filter(r => r.status === 'pago').forEach(r => { acum += r.tipo === 'receber' ? r.valor : -r.valor; });
+  let acum = saldoRealCalculado;
+  if (acum === null) {
+    acum = 0;
+    data.filter(r => r.status === 'pago').forEach(r => { acum += r.tipo === 'receber' ? r.valor : -r.valor; });
+  }
   const saldoHoje = acum;
   const dias = [];
   for (let i = 0; i < horizonte; i++) {
@@ -1761,6 +1775,25 @@ async function renderSaldosMoeda() {
   document.getElementById('saldo-moeda-total').textContent = fmt(total);
 }
 
+// Recalcula saldoRealCalculado a partir da posição de caixa (ver acima) e
+// refaz o Painel com o número certo — chamada no carregamento inicial e
+// depois de cada sincronização, já que ela roda em paralelo com o resto do
+// carregamento (não trava a tela esperando a cotação do Banco Central).
+async function atualizarSaldoRealCalculado() {
+  const { data: lista, error } = await sb.from('saldos_caixas').select('valor,moeda').not('conta_financeira_id', 'is', null);
+  if (error || !lista || !lista.length) { saldoRealCalculado = null; return; }
+  const moedasUnicas = [...new Set(lista.map(s => s.moeda))];
+  const cotacoes = {};
+  await Promise.all(moedasUnicas.map(async (m) => { cotacoes[m] = await buscarCotacaoBacen(m); }));
+  let total = 0;
+  for (const s of lista) {
+    const cot = cotacoes[s.moeda];
+    if (cot) total += Number(s.valor) * cot.taxa;
+  }
+  saldoRealCalculado = total;
+  renderDashboard();
+}
+
 // Uma chamada ao backend só pagina um pedaço do histórico do Bling (teto de
 // tempo de uma function da Vercel) — se ainda não terminou, chama de novo
 // automaticamente até concluir, em vez de fazer a pessoa clicar várias
@@ -1782,6 +1815,7 @@ async function atualizarPosicaoCaixa() {
       if (data.concluido) break;
     }
     await renderSaldosMoeda();
+    await atualizarSaldoRealCalculado();
     status.textContent = 'Atualizado ✓';
   } catch (e) {
     status.textContent = 'Erro ao sincronizar ✗';
@@ -2836,6 +2870,7 @@ initAuth();
 
 function refreshAll() {
   renderDashboard();
+  atualizarSaldoRealCalculado();
   renderTable();
   atualizarSugestoesCategoria();
   if (document.getElementById('tab-indicadores').classList.contains('active')) { renderIndicadores(); renderInsights(); }

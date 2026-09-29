@@ -18,9 +18,16 @@ alter table public.saldos_caixas
   add column if not exists conta_financeira_id text,
   add column if not exists ultima_data_sincronizada date;
 
-create unique index if not exists idx_saldos_caixas_conta_unica
-  on public.saldos_caixas(subscriber_id, provider, conta_financeira_id)
-  where conta_financeira_id is not null;
+-- Precisa ser uma constraint única "cheia" (sem WHERE) — o upsert do
+-- Supabase (PostgREST, on_conflict=...) gera um ON CONFLICT (colunas) sem
+-- predicado, que não bate com um índice único parcial (erro visto em
+-- produção: "there is no unique or exclusion constraint matching the ON
+-- CONFLICT specification"). NULL em conta_financeira_id não vira colisão —
+-- cada NULL conta como distinto numa constraint única.
+alter table public.saldos_caixas
+  drop constraint if exists saldos_caixas_conta_unica;
+alter table public.saldos_caixas
+  add constraint saldos_caixas_conta_unica unique (subscriber_id, provider, conta_financeira_id);
 
 drop policy if exists "saldos_caixas_insert_own" on public.saldos_caixas;
 drop policy if exists "saldos_caixas_update_own" on public.saldos_caixas;
