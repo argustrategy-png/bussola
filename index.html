@@ -511,6 +511,9 @@
   <div class="param-row" style="margin-top:-14px">
     <span class="hint">Ajuste conforme sua realidade — a Selic e a taxa de cartão mudam com o tempo, então mantenha atualizado para insights precisos. A margem de contribuição é usada na Meta de Vendas do Painel; deixe em branco pra calcular sozinho pela receita e custo variável já pagos. A meta de margem líquida varia MUITO por setor (varejo costuma ser bem mais baixo que serviço) — 25% é só um ponto de partida genérico, ajuste pro seu ramo.</span>
   </div>
+  <div class="param-row" id="cambio-info-row" style="display:none;margin-top:-6px">
+    <span class="hint" id="cambio-info"></span>
+  </div>
 
   <div class="section-title">Rentabilidade</div>
   <div class="cards">
@@ -1285,7 +1288,83 @@ async function loadData() {
   const { data: rows, error } = await sb.from('lancamentos').select('*').order('vencimento', { ascending: true });
   if (error) { showSync('Erro ao carregar dados ✗', true); return; }
   data = rows || [];
+  await aplicarConversaoMoeda();
   refreshAll();
+}
+
+// ── Câmbio (Bacen/PTAX) ───────────────────────────────────
+// Lançamentos do ERP não têm campo de moeda (o Bling, por exemplo, não tem
+// isso na API) — quem lança em dólar ou euro marca na descrição com um
+// prefixo, ex.: "[USD] Recebimento Cliente X", e aqui a gente reconhece esse
+// prefixo e converte pra R$ usando a cotação do dia do Banco Central, pra
+// todo o resto do sistema (painel, indicadores, previsão etc.) somar direito
+// em vez de tratar 1000 dólares como se fossem R$ 1.000.
+const MOEDA_REGEX = /^\[(USD|EUR)\]\s*/i;
+const MOEDA_NOME = { USD: 'dólar', EUR: 'euro' };
+let cotacoesUsadas = {}; // preenchido a cada loadData(), só com o que foi de fato usado — pra mostrar em Indicadores
+
+function limparDescricaoMoeda(descricao) {
+  return (descricao || '').replace(MOEDA_REGEX, '');
+}
+
+// API pública do Bacen (PTAX/Olinda) — sem chave, chamada direto do navegador.
+// Cacheada em localStorage por moeda+dia, pra não bater na API a cada
+// carregamento de página. Cai pros dias anteriores se hoje ainda não tiver
+// boletim (fim de semana, feriado, ou antes da abertura do mercado).
+async function buscarCotacaoBacen(moeda) {
+  const hoje = new Date();
+  for (let voltar = 0; voltar <= 8; voltar++) {
+    const d = new Date(hoje); d.setDate(d.getDate() - voltar);
+    const chaveISO = d.toISOString().split('T')[0];
+    const chaveCache = `meuargus_cambio_${moeda}_${chaveISO}`;
+    const cacheado = localStorage.getItem(chaveCache);
+    if (cacheado) { try { return JSON.parse(cacheado); } catch { /* ignora cache corrompido */ } }
+
+    const mmddyyyy = `${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}-${d.getFullYear()}`;
+    const url = `https://olinda.bcb.gov.br/olinda/servico/PTAX/versao/v1/odata/CotacaoMoedaDia(moeda=@moeda,dataCotacao=@dataCotacao)?@moeda='${moeda}'&@dataCotacao='${mmddyyyy}'&$format=json`;
+    try {
+      const resp = await fetch(url);
+      if (!resp.ok) continue;
+      const json = await resp.json();
+      const ultimo = (json.value || []).slice(-1)[0];
+      if (!ultimo) continue; // sem boletim nesse dia (fim de semana/feriado) — tenta o dia anterior
+      const resultado = {
+        moeda, data: chaveISO,
+        taxa: (ultimo.cotacaoCompra + ultimo.cotacaoVenda) / 2,
+        boletim: ultimo.tipoBoletim,
+      };
+      localStorage.setItem(chaveCache, JSON.stringify(resultado));
+      return resultado;
+    } catch (e) { /* rede fora do ar — tenta o dia anterior */ }
+  }
+  return null;
+}
+
+async function aplicarConversaoMoeda() {
+  cotacoesUsadas = {};
+  const moedasNaBase = new Set();
+  data.forEach(r => { const m = (r.descricao || '').match(MOEDA_REGEX); if (m) moedasNaBase.add(m[1].toUpperCase()); });
+  if (!moedasNaBase.size) return;
+
+  const cotacoes = {};
+  await Promise.all([...moedasNaBase].map(async (moeda) => {
+    const c = await buscarCotacaoBacen(moeda);
+    if (c) cotacoes[moeda] = c;
+  }));
+
+  data.forEach(r => {
+    const m = (r.descricao || '').match(MOEDA_REGEX);
+    if (!m) return;
+    const moeda = m[1].toUpperCase();
+    const cot = cotacoes[moeda];
+    if (!cot) return; // Bacen fora do ar — mantém o valor original em vez de travar o painel
+    if (r.valorOriginal === undefined) r.valorOriginal = r.valor; // guarda o valor bruto do Bling só na 1ª conversão
+    r.moedaOriginal = moeda;
+    r.taxaCambio = cot.taxa;
+    r.taxaCambioData = cot.data;
+    r.valor = Math.round(r.valorOriginal * cot.taxa * 100) / 100;
+    cotacoesUsadas[moeda] = cot;
+  });
 }
 
 async function _insert(item) {
@@ -1554,7 +1633,7 @@ function renderAgendaSemana() {
     const sinal = r.tipo === 'receber' ? '+' : '−';
     return `<div class="ag-item">
       <span class="ag-quando${quando === 'Hoje' ? ' hoje' : ''}">${quando}</span>
-      <span class="ag-desc"><span class="ag-tit">${escapeHtml(r.descricao || '—')}</span><small>${r.tipo === 'receber' ? 'A receber' : 'A pagar'}${r.contraparte ? ' · ' + escapeHtml(r.contraparte) : ''}</small></span>
+      <span class="ag-desc"><span class="ag-tit">${escapeHtml(limparDescricaoMoeda(r.descricao) || '—')}</span><small>${r.tipo === 'receber' ? 'A receber' : 'A pagar'}${r.contraparte ? ' · ' + escapeHtml(r.contraparte) : ''}${r.moedaOriginal ? ' · ' + r.moedaOriginal : ''}</small></span>
       <span class="ag-valor ${cor}">${sinal} ${fmt(r.valor)}</span>
     </div>`;
   };
@@ -1685,6 +1764,17 @@ function renderIndicadores() {
 
   document.getElementById('k-receita').textContent = fmt(k.receitasPagas);
   document.getElementById('k-capgiro').textContent = fmt(k.capGiro);
+
+  const cambioRow = document.getElementById('cambio-info-row');
+  const moedas = Object.keys(cotacoesUsadas);
+  if (moedas.length) {
+    cambioRow.style.display = 'flex';
+    document.getElementById('cambio-info').textContent = '💱 Câmbio (Bacen, referência): ' +
+      moedas.map(m => `1 ${m} = ${fmt(cotacoesUsadas[m].taxa)} (${fmtDate(cotacoesUsadas[m].data)})`).join(' · ') +
+      ' — lançamentos com "[' + moedas.join(']" ou "[') + ']" na descrição são convertidos automaticamente.';
+  } else {
+    cambioRow.style.display = 'none';
+  }
 
   const folegoEl = document.getElementById('k-folego');
   const folegoCard = document.getElementById('k-card-folego');
@@ -1948,11 +2038,11 @@ function renderTable() {
     const tocBadge = r.tipo === 'pagar' ? `<span class="badge ${r.toc||'do'}">${r.toc === 'ctv' ? 'Variável' : 'Fixo'}</span>` : '—';
     return `<tr class="${r.status==='pago'?'row-paid':''}">
       <td><span class="badge ${r.tipo}">${r.tipo==='receber'?'Receber':'Pagar'}</span></td>
-      <td>${r.descricao}${r.recorrencia&&r.recorrencia!=='none'?` <span class="tag-status">↻${r.recorrencia}</span>`:''}</td>
+      <td>${limparDescricaoMoeda(r.descricao)}${r.recorrencia&&r.recorrencia!=='none'?` <span class="tag-status">↻${r.recorrencia}</span>`:''}</td>
       <td>${r.categoria||'—'}</td>
       <td>${r.contraparte||'—'}</td>
       <td style="${vencido?'color:var(--red);font-weight:600':''}">${fmtDate(r.vencimento)}</td>
-      <td>${fmt(r.valor)}</td>
+      <td>${fmt(r.valor)}${r.moedaOriginal ? `<div class="tag-status" title="Convertido da cotação do Bacen de ${fmtDate(r.taxaCambioData||'')}"> ${r.moedaOriginal} ${r.valorOriginal.toLocaleString('pt-BR',{minimumFractionDigits:2,maximumFractionDigits:2})} · câmbio ${r.taxaCambio.toLocaleString('pt-BR',{minimumFractionDigits:4,maximumFractionDigits:4})}</div>` : ''}</td>
       <td>${tocBadge}</td>
       <td><button onclick="toggleStatus('${r.id}')" style="background:none;border:none;cursor:pointer;font-size:0.82rem;color:var(--text2);font-family:Inter,sans-serif">${r.status==='pago'?'✅ Pago':'⏳ Pendente'}</button></td>
       <td><button class="btn btn-danger" onclick="removeItem('${r.id}')">✕</button></td>
