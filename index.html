@@ -1742,33 +1742,31 @@ async function buscarCotacaoBacen(moeda) {
   return null;
 }
 
-function getSaldosMoeda() {
-  try { return JSON.parse(localStorage.getItem('meuargus_saldos_moeda') || '[]'); }
-  catch { return []; }
-}
-function setSaldosMoeda(lista) { localStorage.setItem('meuargus_saldos_moeda', JSON.stringify(lista)); }
-
-function adicionarSaldoMoeda() {
+// Guardado no Supabase (tabela saldos_caixas, RLS por subscriber_id) — não no
+// navegador — pra quem entrar nessa conta do MeuArgus, de qualquer aparelho,
+// ver os mesmos números.
+async function adicionarSaldoMoeda() {
   const moeda = document.getElementById('saldo-moeda').value;
   const nome = document.getElementById('saldo-nome').value.trim();
   const valor = parseFloat(document.getElementById('saldo-valor').value);
   if (isNaN(valor)) { showSync('Informe o saldo ✗', true); return; }
-  const lista = getSaldosMoeda();
-  lista.push({ id: uid(), moeda, nome, valor });
-  setSaldosMoeda(lista);
+  const { error } = await sb.from('saldos_caixas').insert({ subscriber_id: currentUser.id, moeda, nome: nome || null, valor });
+  if (error) { showSync('Erro ao salvar ✗', true); return; }
   document.getElementById('saldo-nome').value = '';
   document.getElementById('saldo-valor').value = '';
   renderSaldosMoeda();
 }
-function removerSaldoMoeda(id) {
-  setSaldosMoeda(getSaldosMoeda().filter(s => s.id !== id));
+async function removerSaldoMoeda(id) {
+  const { error } = await sb.from('saldos_caixas').delete().eq('id', id);
+  if (error) { showSync('Erro ao remover ✗', true); return; }
   renderSaldosMoeda();
 }
 
 async function renderSaldosMoeda() {
   const tb = document.getElementById('tb-saldos-moeda');
   if (!tb) return;
-  const lista = getSaldosMoeda();
+  const { data: lista, error } = await sb.from('saldos_caixas').select('*').order('created_at', { ascending: true });
+  if (error) { tb.innerHTML = '<tr><td colspan="6" class="empty">Erro ao carregar.</td></tr>'; return; }
   if (!lista.length) {
     tb.innerHTML = '<tr><td colspan="6" class="empty">Nenhuma conta adicionada ainda.</td></tr>';
     document.getElementById('saldo-moeda-total').textContent = fmt(0);
