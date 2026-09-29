@@ -240,30 +240,4 @@ export const bling = {
       data: pedido.data || null,
     };
   },
-
-  // Contas pagas em moeda estrangeira (ex.: sub-conta Wise em USD/EUR): a
-  // própria conta a pagar/receber não tem campo de moeda (confirmado no
-  // schema da API — não existe), mas o lançamento bancário que a baixou, em
-  // Caixas e Bancos, já vem convertido pra R$ pelo Bling/banco. Cada
-  // lançamento de caixa referencia a duplicata (conta) que baixou via
-  // origem.tipo === 'duplicata' + origem.id — usa isso pra pegar o valor
-  // certo. Só cobre o que já foi baixado; pendente não tem lançamento de
-  // caixa ainda, então continua sem correção possível por aqui.
-  async fetchValoresPagosPorDuplicata({ accessToken }, diasAtras = 90) {
-    const hoje = new Date();
-    const inicio = new Date(hoje.getTime() - diasAtras * 24 * 60 * 60 * 1000);
-    const fmt = (d) => d.toISOString().split('T')[0];
-    const itens = await fetchTodasPaginas(
-      `/caixas?dataInicial=${fmt(inicio)}&dataFinal=${fmt(hoje)}`,
-      accessToken,
-      '/caixas'
-    );
-    const mapa = {};
-    itens.forEach((item) => {
-      if (item.origem?.tipo !== 'duplicata' || !item.origem?.id) return;
-      const id = String(item.origem.id);
-      mapa[id] = (mapa[id] || 0) + (Number(item.valor) || 0);
-    });
-    return mapa;
-  },
 };
