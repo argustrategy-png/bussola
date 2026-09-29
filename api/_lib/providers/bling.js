@@ -240,4 +240,25 @@ export const bling = {
       data: pedido.data || null,
     };
   },
+
+  // Posição de caixa: o Bling não expõe saldo de conta financeira em nenhum
+  // endpoint (confirmado no OpenAPI inteiro — só ContasFinanceirasDadosBasicosDTO,
+  // que é só {id, descricao}). O jeito de chegar no saldo atual é somar
+  // crédito menos débito de TODAS as movimentações de /caixas desde o
+  // início da conta — não tem outro caminho. Uma página de cada vez (sem
+  // paginar tudo aqui dentro) porque isso pode ser muita coisa pra uma
+  // function só (ver sincronizarPosicaoCaixa em sync.js, que pagina aos
+  // poucos e retoma na próxima chamada).
+  async fetchPaginaCaixas({ accessToken }, { dataInicial, dataFinal, pagina }) {
+    const params = new URLSearchParams({
+      pagina: String(pagina),
+      limite: String(POR_PAGINA),
+      dataInicial,
+      dataFinal,
+      situacao: 'R', // só lançamentos registrados, exclui excluídos
+    });
+    const resp = await getComRetry429(`${API_BASE}/caixas?${params}`, accessToken);
+    if (!resp.ok) throw new Error(`Bling /caixas falhou: ${resp.status} ${await resp.text()}`);
+    return (await resp.json())?.data || [];
+  },
 };

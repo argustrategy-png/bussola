@@ -526,31 +526,16 @@
   <div class="divider"></div>
 
   <div class="section-title">Posição de caixa — Caixas e Bancos</div>
-  <p class="section-sub">Digite o saldo de cada conta que aparece em <strong>Caixas e Bancos</strong> no Bling (Caixa, Itaú, Nubank, C6 Flutu, contas Wise por moeda...). Contas em moeda estrangeira convertem pra R$ pela cotação do dia do Banco Central. Não é sincronizado automaticamente — atualize quando quiser conferir a posição.</p>
+  <p class="section-sub">Saldo de cada conta do Bling (Caixa, Itaú, Nubank, C6 Flutu, contas Wise por moeda...), calculado automaticamente a partir do histórico de <strong>Caixas e Bancos</strong> — o Bling não tem saldo pronto pela API, então é a soma de todas as movimentações. Contas em moeda estrangeira convertem pra R$ pela cotação do dia do Banco Central. A primeira atualização pode demorar (precisa ler o histórico inteiro); as seguintes são rápidas.</p>
   <div class="param-row">
-    <label>Moeda
-      <select id="saldo-moeda">
-        <option value="BRL">BRL — Real</option>
-        <option value="USD">USD — Dólar</option>
-        <option value="EUR">EUR — Euro</option>
-        <option value="GBP">GBP — Libra</option>
-        <option value="CAD">CAD — Dólar canadense</option>
-        <option value="DKK">DKK — Coroa dinamarquesa</option>
-      </select>
-    </label>
-    <label>Conta <span class="hint" style="text-transform:none">(opcional, ex.: "Wise USD")</span>
-      <input type="text" id="saldo-nome" placeholder="Nome da conta">
-    </label>
-    <label>Saldo
-      <input type="text" inputmode="decimal" id="saldo-valor" placeholder="Ex: 10.410,00">
-    </label>
-    <button class="btn btn-primary" onclick="adicionarSaldoMoeda()">Adicionar</button>
+    <button class="btn btn-primary" onclick="atualizarPosicaoCaixa()" id="btn-atualizar-posicao">Atualizar posição de caixa</button>
+    <span class="hint" id="posicao-caixa-status"></span>
   </div>
   <div class="table-wrap">
     <table>
-      <thead><tr><th>Conta</th><th>Moeda</th><th>Saldo</th><th>Câmbio (Bacen)</th><th>Em R$</th><th></th></tr></thead>
+      <thead><tr><th>Conta</th><th>Moeda</th><th>Saldo</th><th>Câmbio (Bacen)</th><th>Em R$</th></tr></thead>
       <tbody id="tb-saldos-moeda"></tbody>
-      <tfoot><tr><td colspan="4" style="text-align:right;font-weight:700">Total em R$</td><td id="saldo-moeda-total" style="font-weight:700">R$ 0,00</td><td></td></tr></tfoot>
+      <tfoot><tr><td colspan="4" style="text-align:right;font-weight:700">Total em R$</td><td id="saldo-moeda-total" style="font-weight:700">R$ 0,00</td></tr></tfoot>
     </table>
   </div>
 
@@ -1742,37 +1727,16 @@ async function buscarCotacaoBacen(moeda) {
   return null;
 }
 
-// Guardado no Supabase (tabela saldos_caixas, RLS por subscriber_id) — não no
-// navegador — pra quem entrar nessa conta do MeuArgus, de qualquer aparelho,
-// ver os mesmos números.
-// Campo de saldo é texto, não number: um <input type="number"> rejeita a
-// vírgula decimal do formato BR e corta o valor no primeiro caractere
-// inválido (ex.: "10.410,00" viraria só "10.410" ≈ 10, não 10410). parseValorBR
-// já existe mais abaixo (usada na importação de planilha) e resolve isso.
-async function adicionarSaldoMoeda() {
-  const moeda = document.getElementById('saldo-moeda').value;
-  const nome = document.getElementById('saldo-nome').value.trim();
-  const valor = parseValorBR(document.getElementById('saldo-valor').value);
-  if (isNaN(valor)) { showSync('Informe o saldo ✗', true); return; }
-  const { error } = await sb.from('saldos_caixas').insert({ subscriber_id: currentUser.id, moeda, nome: nome || null, valor });
-  if (error) { showSync('Erro ao salvar ✗', true); return; }
-  document.getElementById('saldo-nome').value = '';
-  document.getElementById('saldo-valor').value = '';
-  renderSaldosMoeda();
-}
-async function removerSaldoMoeda(id) {
-  const { error } = await sb.from('saldos_caixas').delete().eq('id', id);
-  if (error) { showSync('Erro ao remover ✗', true); return; }
-  renderSaldosMoeda();
-}
-
+// Calculado automaticamente pelo backend a partir do histórico de Caixas e
+// Bancos do Bling (ver sincronizarPosicaoCaixa em api/erp/sync.js) e
+// guardado no Supabase — o frontend só lê e mostra, nunca digita nem edita.
 async function renderSaldosMoeda() {
   const tb = document.getElementById('tb-saldos-moeda');
   if (!tb) return;
-  const { data: lista, error } = await sb.from('saldos_caixas').select('*').order('created_at', { ascending: true });
-  if (error) { tb.innerHTML = '<tr><td colspan="6" class="empty">Erro ao carregar.</td></tr>'; return; }
+  const { data: lista, error } = await sb.from('saldos_caixas').select('*').not('conta_financeira_id', 'is', null).order('nome', { ascending: true });
+  if (error) { tb.innerHTML = '<tr><td colspan="5" class="empty">Erro ao carregar.</td></tr>'; return; }
   if (!lista.length) {
-    tb.innerHTML = '<tr><td colspan="6" class="empty">Nenhuma conta adicionada ainda.</td></tr>';
+    tb.innerHTML = '<tr><td colspan="5" class="empty">Ainda não sincronizado — clique em "Atualizar posição de caixa".</td></tr>';
     document.getElementById('saldo-moeda-total').textContent = fmt(0);
     return;
   }
@@ -1792,10 +1756,38 @@ async function renderSaldosMoeda() {
       <td>${s.valor.toLocaleString('pt-BR',{minimumFractionDigits:2,maximumFractionDigits:2})}</td>
       <td>${cambioTxt}</td>
       <td>${valorR !== null ? fmt(valorR) : '—'}</td>
-      <td><button class="btn btn-danger" onclick="removerSaldoMoeda('${s.id}')">✕</button></td>
     </tr>`;
   }).join('');
   document.getElementById('saldo-moeda-total').textContent = fmt(total);
+}
+
+// Uma chamada ao backend só pagina um pedaço do histórico do Bling (teto de
+// tempo de uma function da Vercel) — se ainda não terminou, chama de novo
+// automaticamente até concluir, em vez de fazer a pessoa clicar várias
+// vezes. MAX_TENTATIVAS é só uma trava de segurança (cada chamada cobre uns
+// 55s de paginação no backend, então 40 tentativas já é bem mais histórico
+// do que qualquer conta deveria ter).
+async function atualizarPosicaoCaixa() {
+  const btn = document.getElementById('btn-atualizar-posicao');
+  const status = document.getElementById('posicao-caixa-status');
+  if (!erpStatusAtual.bling) { status.textContent = 'Disponível só para quem usa Bling.'; return; }
+  const MAX_TENTATIVAS = 40;
+  btn.disabled = true;
+  try {
+    for (let tentativa = 1; tentativa <= MAX_TENTATIVAS; tentativa++) {
+      status.textContent = tentativa === 1 ? 'Sincronizando…' : `Sincronizando… (parte ${tentativa})`;
+      const resp = await fetch('/api/erp/sync', { method: 'POST', headers: await erpAuthHeader(), body: JSON.stringify({ provider: 'bling', tipo: 'posicao_caixa' }) });
+      const data = await resp.json();
+      if (!resp.ok || !data.ok) { status.textContent = 'Erro ao sincronizar ✗'; return; }
+      if (data.concluido) break;
+    }
+    await renderSaldosMoeda();
+    status.textContent = 'Atualizado ✓';
+  } catch (e) {
+    status.textContent = 'Erro ao sincronizar ✗';
+  } finally {
+    btn.disabled = false;
+  }
 }
 
 function renderIndicadores() {

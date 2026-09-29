@@ -11,7 +11,104 @@ import {
   upsertVendasItens,
   getContatosCache,
   upsertContatosCache,
+  getSyncEstado,
+  saveSyncEstado,
+  deleteSyncEstado,
+  getSaldosCaixasCalculados,
+  upsertSaldosCaixas,
 } from '../_lib/supabase.js';
+
+// Ponto de partida quando ainda não existe nenhum saldo calculado pra essa
+// conta — bem anterior a qualquer empresa usando o MeuArgus, só pra
+// garantir que pega o histórico inteiro do Bling na primeira sincronização.
+const ANCHOR_INICIO_POSICAO_CAIXA = '2015-01-01';
+
+// "Wise USD", "Wise EUR"... — é assim que a Flutu nomeou as contas
+// multi-moeda no Bling (confirmado por print da tela Caixas e Bancos). Não
+// tem campo de moeda na API, então a moeda é inferida do nome da conta;
+// contas sem esse padrão (Caixa, Itaú, Nubank...) são tratadas como BRL.
+function inferirMoedaPosicaoCaixa(descricao) {
+  const m = /^wise\s+([a-z]{3})$/i.exec((descricao || '').trim());
+  return m ? m[1].toUpperCase() : 'BRL';
+}
+
+// Soma crédito menos débito de /caixas, uma página de cada vez, com o mesmo
+// espaçamento usado no resto do sync pro rate limit do Bling (3 req/s).
+// Resumível: se o tempo acabar no meio, salva o progresso (página atual +
+// acumulado parcial por conta) em sync_estado e retoma dali na próxima
+// chamada — só grava o resultado final em saldos_caixas quando a
+// paginação chega ao fim de verdade. Sincronizações seguintes (depois da
+// primeira, que pega o histórico inteiro) partem de ultima_data_sincronizada
+// + 1 dia, então ficam rápidas.
+async function sincronizarPosicaoCaixa(inicioHandler, subscriberId, providerName, provider, ctx) {
+  if (typeof provider.fetchPaginaCaixas !== 'function') {
+    return { ok: false, error: 'provider_sem_suporte_posicao_caixa' };
+  }
+  const LIMITE_MS = 55_000;
+  const ESPACO_PAGINAS_MS = 350;
+
+  let estado = await getSyncEstado(subscriberId, providerName, 'posicao_caixa');
+  if (!estado) {
+    const existentes = await getSaldosCaixasCalculados(subscriberId, providerName);
+    if (existentes.length) {
+      const maiorDataAnterior = existentes.reduce(
+        (m, r) => (r.ultima_data_sincronizada > m ? r.ultima_data_sincronizada : m),
+        existentes[0].ultima_data_sincronizada
+      );
+      const proximoDia = new Date(`${maiorDataAnterior}T00:00:00Z`);
+      proximoDia.setUTCDate(proximoDia.getUTCDate() + 1);
+      estado = {
+        pagina: 1,
+        dataInicial: proximoDia.toISOString().slice(0, 10),
+        acumulado: Object.fromEntries(existentes.map((r) => [r.conta_financeira_id, { descricao: r.nome, soma: Number(r.valor) }])),
+        maiorData: maiorDataAnterior,
+      };
+    } else {
+      estado = { pagina: 1, dataInicial: ANCHOR_INICIO_POSICAO_CAIXA, acumulado: {}, maiorData: null };
+    }
+  }
+
+  const dataFinalHoje = new Date().toISOString().slice(0, 10);
+  let pagina = estado.pagina;
+  const acumulado = estado.acumulado;
+  let maiorData = estado.maiorData;
+  let concluido = false;
+
+  while (Date.now() - inicioHandler < LIMITE_MS) {
+    if (pagina > 1) await new Promise((r) => setTimeout(r, ESPACO_PAGINAS_MS));
+    const registros = await provider.fetchPaginaCaixas(ctx, { dataInicial: estado.dataInicial, dataFinal: dataFinalHoje, pagina });
+    if (!registros.length) { concluido = true; break; }
+    for (const r of registros) {
+      const contaId = String(r.contaFinanceira?.id ?? 'sem_conta');
+      const descricao = r.contaFinanceira?.descricao || 'Conta sem nome';
+      const sinal = r.debCred === 'C' ? 1 : -1;
+      if (!acumulado[contaId]) acumulado[contaId] = { descricao, soma: 0 };
+      acumulado[contaId].descricao = descricao;
+      acumulado[contaId].soma += sinal * (Number(r.valor) || 0);
+      if (!maiorData || r.data > maiorData) maiorData = r.data;
+    }
+    pagina++;
+  }
+
+  if (concluido) {
+    const registros = Object.entries(acumulado).map(([contaId, { descricao, soma }]) => ({
+      subscriber_id: subscriberId,
+      provider: providerName,
+      conta_financeira_id: contaId,
+      nome: descricao,
+      moeda: inferirMoedaPosicaoCaixa(descricao),
+      valor: soma,
+      ultima_data_sincronizada: maiorData || dataFinalHoje,
+    }));
+    const r = await upsertSaldosCaixas(registros);
+    if (!r.ok) throw new Error(`Falha ao gravar posição de caixa: ${await r.text()}`);
+    await deleteSyncEstado(subscriberId, providerName, 'posicao_caixa');
+    return { ok: true, concluido: true, contas: registros.length };
+  }
+
+  await saveSyncEstado(subscriberId, providerName, 'posicao_caixa', { pagina, dataInicial: estado.dataInicial, acumulado, maiorData });
+  return { ok: true, concluido: false, paginaAtual: pagina };
+}
 
 // Orçamento de tempo pra resolver nomes de contato novos, calculado com o que
 // *sobra* depois de buscar as contas — não um número fixo a partir do início
@@ -29,7 +126,7 @@ export default async function handler(req, res) {
   const inicioHandler = Date.now();
   if (req.method !== 'POST') return res.status(405).json({ error: 'method_not_allowed' });
 
-  const { provider: providerName } = req.body || {};
+  const { provider: providerName, tipo } = req.body || {};
   if (!providerName) return res.status(400).json({ error: 'provider obrigatório' });
 
   const subscriberId = await getAuthenticatedSubscriber(req);
@@ -65,6 +162,14 @@ export default async function handler(req, res) {
     const ctx = provider.authType === 'oauth2'
       ? { accessToken: integracao.access_token, realmId: integracao.erp_account_id }
       : (integracao.credentials || { appKey: integracao.access_token, appSecret: integracao.refresh_token });
+
+    // Sincronização da posição de caixa (Caixas e Bancos) é um fluxo à parte
+    // do sync normal de contas a pagar/receber — não mexe em lançamentos,
+    // produtos ou o "ultima_sincronizacao" da integração.
+    if (tipo === 'posicao_caixa') {
+      const resultado = await sincronizarPosicaoCaixa(inicioHandler, subscriberId, providerName, provider, ctx);
+      return res.status(200).json(resultado);
+    }
 
     // Sequencial, não em paralelo: cada chamada pagina sozinha, e rodar as
     // duas ao mesmo tempo dobra o ritmo de chamadas contra o limite de taxa

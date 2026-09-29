@@ -120,3 +120,51 @@ export async function upsertContatosCache(registros) {
     body: JSON.stringify(registros),
   });
 }
+
+// Estado de progresso de uma sincronização resumível (ver sincronizarPosicaoCaixa
+// em sync.js) — guarda página atual + acumulado parcial enquanto não termina,
+// apagado quando a sincronização conclui.
+export async function getSyncEstado(subscriberId, provider, tipo) {
+  const resp = await fetch(
+    `${process.env.SUPABASE_URL}/rest/v1/sync_estado?subscriber_id=eq.${subscriberId}&provider=eq.${provider}&tipo=eq.${tipo}&select=estado`,
+    { headers: serviceHeaders() }
+  );
+  if (!resp.ok) return null;
+  const rows = await resp.json();
+  return rows?.[0]?.estado || null;
+}
+
+export async function saveSyncEstado(subscriberId, provider, tipo, estado) {
+  return fetch(`${process.env.SUPABASE_URL}/rest/v1/sync_estado?on_conflict=subscriber_id,provider,tipo`, {
+    method: 'POST',
+    headers: serviceHeaders({ 'Content-Type': 'application/json', Prefer: 'resolution=merge-duplicates' }),
+    body: JSON.stringify({ subscriber_id: subscriberId, provider, tipo, estado, updated_at: new Date().toISOString() }),
+  });
+}
+
+export async function deleteSyncEstado(subscriberId, provider, tipo) {
+  return fetch(
+    `${process.env.SUPABASE_URL}/rest/v1/sync_estado?subscriber_id=eq.${subscriberId}&provider=eq.${provider}&tipo=eq.${tipo}`,
+    { method: 'DELETE', headers: serviceHeaders() }
+  );
+}
+
+// Saldos de caixa já calculados (posição de caixa automática) — linhas com
+// conta_financeira_id preenchido, uma por conta do ERP.
+export async function getSaldosCaixasCalculados(subscriberId, provider) {
+  const resp = await fetch(
+    `${process.env.SUPABASE_URL}/rest/v1/saldos_caixas?subscriber_id=eq.${subscriberId}&provider=eq.${provider}&conta_financeira_id=not.is.null&select=conta_financeira_id,nome,valor,ultima_data_sincronizada`,
+    { headers: serviceHeaders() }
+  );
+  if (!resp.ok) return [];
+  return resp.json();
+}
+
+export async function upsertSaldosCaixas(registros) {
+  if (!registros.length) return { ok: true };
+  return fetch(`${process.env.SUPABASE_URL}/rest/v1/saldos_caixas?on_conflict=subscriber_id,provider,conta_financeira_id`, {
+    method: 'POST',
+    headers: serviceHeaders({ 'Content-Type': 'application/json', Prefer: 'resolution=merge-duplicates' }),
+    body: JSON.stringify(registros),
+  });
+}
