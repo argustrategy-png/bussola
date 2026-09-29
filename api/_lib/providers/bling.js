@@ -11,13 +11,16 @@ const POR_PAGINA = 100;
 // a 3 requisições por segundo, então não dá pra puxar histórico infinito.
 const MAX_PAGINAS = 20;
 
-// GET simples com uma nova tentativa em 429 (limite de taxa do Bling).
-async function getComRetry429(url, accessToken) {
-  const init = { headers: { Authorization: `Bearer ${accessToken}`, Accept: 'application/json' } };
-  let resp = await fetch(url, init);
-  if (resp.status === 429) {
-    await new Promise((r) => setTimeout(r, 1200));
-    resp = await fetch(url, init);
+// GET com novas tentativas em 429 (limite de taxa do Bling — 3 requisições
+// por segundo). Backoff crescente: contas com muito histórico paginam bastante
+// e, combinado com outras chamadas da mesma sincronização, passam do limite
+// mais de uma vez; uma só tentativa extra não bastava (visto em produção).
+async function getComRetry429(url, accessToken, tentativa = 0) {
+  const MAX_TENTATIVAS = 4;
+  const resp = await fetch(url, { headers: { Authorization: `Bearer ${accessToken}`, Accept: 'application/json' } });
+  if (resp.status === 429 && tentativa < MAX_TENTATIVAS) {
+    await new Promise((r) => setTimeout(r, 1000 * (tentativa + 1)));
+    return getComRetry429(url, accessToken, tentativa + 1);
   }
   return resp;
 }

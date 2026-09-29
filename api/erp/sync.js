@@ -59,10 +59,12 @@ export default async function handler(req, res) {
       ? { accessToken: integracao.access_token, realmId: integracao.erp_account_id }
       : (integracao.credentials || { appKey: integracao.access_token, appSecret: integracao.refresh_token });
 
-    const [pagar, receber] = await Promise.all([
-      provider.fetchContas({ ...ctx, tipo: 'pagar' }),
-      provider.fetchContas({ ...ctx, tipo: 'receber' }),
-    ]);
+    // Sequencial, não em paralelo: cada chamada pagina sozinha, e rodar as
+    // duas ao mesmo tempo dobra o ritmo de chamadas contra o limite de taxa
+    // do ERP (Bling: 3 requisições/segundo) — visto derrubando a sincronização
+    // de contas com bastante histórico.
+    const pagar = await provider.fetchContas({ ...ctx, tipo: 'pagar' });
+    const receber = await provider.fetchContas({ ...ctx, tipo: 'receber' });
 
     // Nome do contato: alguns providers (hoje só Bling) não trazem o nome já
     // na listagem de contas, só o ID — busca à parte, cacheada, pra não achar
