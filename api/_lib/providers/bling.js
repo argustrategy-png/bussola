@@ -147,14 +147,21 @@ export const bling = {
   async fetchContatoNomes({ accessToken }, ids, deadline) {
     const ESPACO_MS = 350; // ~2,8 req/s, com margem sob o limite de 3 req/s
     const resultado = {};
+    let primeiroErro = null; // diagnóstico: por que nada resolveu (ex.: escopo faltando)
     for (let i = 0; i < ids.length; i++) {
       if (deadline && Date.now() >= deadline) break;
       if (i > 0) await new Promise((r) => setTimeout(r, ESPACO_MS));
       const id = ids[i];
       const r = await getComRetry429(`${API_BASE}/contatos/${id}`, accessToken);
-      if (!r.ok) continue;
+      if (!r.ok) {
+        if (!primeiroErro) primeiroErro = `${r.status} ${(await r.text()).slice(0, 300)}`;
+        continue;
+      }
       const dados = (await r.json())?.data;
       if (dados?.nome) resultado[id] = dados.nome;
+    }
+    if (primeiroErro && Object.keys(resultado).length === 0) {
+      console.error('bling fetchContatoNomes: nenhum contato resolvido, primeiro erro:', primeiroErro);
     }
     return resultado;
   },
