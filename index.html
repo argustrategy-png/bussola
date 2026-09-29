@@ -542,7 +542,7 @@
       <input type="text" id="saldo-nome" placeholder="Nome da conta">
     </label>
     <label>Saldo
-      <input type="number" step="0.01" id="saldo-valor" placeholder="0,00">
+      <input type="text" inputmode="decimal" id="saldo-valor" placeholder="Ex: 10.410,00">
     </label>
     <button class="btn btn-primary" onclick="adicionarSaldoMoeda()">Adicionar</button>
   </div>
@@ -1745,10 +1745,14 @@ async function buscarCotacaoBacen(moeda) {
 // Guardado no Supabase (tabela saldos_caixas, RLS por subscriber_id) — não no
 // navegador — pra quem entrar nessa conta do MeuArgus, de qualquer aparelho,
 // ver os mesmos números.
+// Campo de saldo é texto, não number: um <input type="number"> rejeita a
+// vírgula decimal do formato BR e corta o valor no primeiro caractere
+// inválido (ex.: "10.410,00" viraria só "10.410" ≈ 10, não 10410). parseValorBR
+// já existe mais abaixo (usada na importação de planilha) e resolve isso.
 async function adicionarSaldoMoeda() {
   const moeda = document.getElementById('saldo-moeda').value;
   const nome = document.getElementById('saldo-nome').value.trim();
-  const valor = parseFloat(document.getElementById('saldo-valor').value);
+  const valor = parseValorBR(document.getElementById('saldo-valor').value);
   if (isNaN(valor)) { showSync('Informe o saldo ✗', true); return; }
   const { error } = await sb.from('saldos_caixas').insert({ subscriber_id: currentUser.id, moeda, nome: nome || null, valor });
   if (error) { showSync('Erro ao salvar ✗', true); return; }
