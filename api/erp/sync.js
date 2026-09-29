@@ -74,6 +74,24 @@ export default async function handler(req, res) {
     const receber = await provider.fetchContas({ ...ctx, tipo: 'receber' });
     console.log(`${providerName} sync: contas levaram ${Date.now() - inicioHandler}ms (pagar ${pagar.length}, receber ${receber.length})`);
 
+    // Contas pagas em moeda estrangeira: a conta em si não tem campo de
+    // moeda, mas o lançamento bancário que a baixou (Caixas e Bancos) já vem
+    // convertido pra R$ — troca o valor bruto da conta pelo valor baixado
+    // antes de mapear, só pra contas totalmente pagas (situacao 2). Só
+    // Bling implementa isso hoje; outro provider sem esse método, pula.
+    if (typeof provider.fetchValoresPagosPorDuplicata === 'function') {
+      try {
+        const valoresPagos = await provider.fetchValoresPagosPorDuplicata(ctx);
+        console.log(`${providerName} sync: valores pagos levaram ${Date.now() - inicioHandler}ms (${Object.keys(valoresPagos).length} duplicata(s) com baixa no período)`);
+        [...pagar, ...receber].forEach((c) => {
+          const valorPago = valoresPagos[String(c.id)];
+          if (c.situacao === 2 && valorPago !== undefined) c.valor = valorPago;
+        });
+      } catch (err) {
+        console.error(`${providerName} sync valores pagos error`, err);
+      }
+    }
+
     // Nome do contato: alguns providers (hoje só Bling) não trazem o nome já
     // na listagem de contas, só o ID — busca à parte, cacheada, pra não achar
     // "Contato Bling #123" em vez do nome do cliente/fornecedor no painel.
