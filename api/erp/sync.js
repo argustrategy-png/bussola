@@ -18,6 +18,48 @@ import {
   upsertSaldosCaixas,
 } from '../_lib/supabase.js';
 
+// Diagnóstico temporário: dump bruto de todas as movimentações de UMA conta
+// financeira, sem gravar nada — usado pra investigar por que C6 Flutu deu
+// R$32.771,53 quando o Bling mostra saldo zerado (Wise CAD/USD bateram
+// certo com a mesma lógica, então suspeita de algo específico dessa conta:
+// ID duplicado entre páginas, ou lançamentos de transferência interna que
+// o Bling não conta no saldo mas nós estamos contando).
+async function diagnosticarContaCaixa(inicioHandler, provider, ctx, contaFinanceiraId) {
+  const LIMITE_MS = 55_000;
+  const ESPACO_PAGINAS_MS = 350;
+  const dataFinalHoje = new Date().toISOString().slice(0, 10);
+  const idsVistos = new Set();
+  const duplicados = [];
+  const porCategoria = {};
+  let qtdC = 0, somaC = 0, qtdD = 0, somaD = 0, pagina = 1;
+
+  while (Date.now() - inicioHandler < LIMITE_MS) {
+    if (pagina > 1) await new Promise((r) => setTimeout(r, ESPACO_PAGINAS_MS));
+    const registros = await provider.fetchPaginaCaixas(ctx, {
+      dataInicial: ANCHOR_INICIO_POSICAO_CAIXA, dataFinal: dataFinalHoje, pagina, idContaFinanceira: contaFinanceiraId,
+    });
+    if (!registros.length) break;
+    for (const r of registros) {
+      if (idsVistos.has(r.id)) duplicados.push(r.id); else idsVistos.add(r.id);
+      const cat = r.categoria?.descricao || r.descricao || 'sem categoria';
+      if (!porCategoria[cat]) porCategoria[cat] = { qtd: 0, soma: 0 };
+      porCategoria[cat].qtd++;
+      porCategoria[cat].soma += Number(r.valor) || 0;
+      if (r.debCred === 'C') { qtdC++; somaC += Number(r.valor) || 0; } else { qtdD++; somaD += Number(r.valor) || 0; }
+    }
+    pagina++;
+  }
+
+  const resumo = {
+    contaFinanceiraId, totalRegistros: idsVistos.size, paginasLidas: pagina - 1,
+    qtdC, somaC, qtdD, somaD, liquido: somaC + somaD,
+    duplicados: duplicados.length, idsDuplicados: duplicados.slice(0, 10),
+    porCategoria: Object.fromEntries(Object.entries(porCategoria).map(([k, v]) => [k, { qtd: v.qtd, soma: Number(v.soma.toFixed(2)) }])),
+  };
+  console.log('posicao_caixa diagnostico_conta:', JSON.stringify(resumo));
+  return { ok: true, resumo };
+}
+
 // Ponto de partida quando ainda não existe nenhum saldo calculado pra essa
 // conta — bem anterior a qualquer empresa usando o MeuArgus, só pra
 // garantir que pega o histórico inteiro do Bling na primeira sincronização.
@@ -129,7 +171,7 @@ export default async function handler(req, res) {
   const inicioHandler = Date.now();
   if (req.method !== 'POST') return res.status(405).json({ error: 'method_not_allowed' });
 
-  const { provider: providerName, tipo } = req.body || {};
+  const { provider: providerName, tipo, contaFinanceiraId } = req.body || {};
   if (!providerName) return res.status(400).json({ error: 'provider obrigatório' });
 
   const subscriberId = await getAuthenticatedSubscriber(req);
@@ -171,6 +213,10 @@ export default async function handler(req, res) {
     // produtos ou o "ultima_sincronizacao" da integração.
     if (tipo === 'posicao_caixa') {
       const resultado = await sincronizarPosicaoCaixa(inicioHandler, subscriberId, providerName, provider, ctx);
+      return res.status(200).json(resultado);
+    }
+    if (tipo === 'diagnostico_conta') {
+      const resultado = await diagnosticarContaCaixa(inicioHandler, provider, ctx, contaFinanceiraId);
       return res.status(200).json(resultado);
     }
 

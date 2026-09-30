@@ -529,8 +529,10 @@
   <p class="section-sub">Saldo de cada conta do Bling (Caixa, Itaú, Nubank, C6 Flutu, contas Wise por moeda...), calculado automaticamente a partir do histórico de <strong>Caixas e Bancos</strong> — o Bling não tem saldo pronto pela API, então é a soma de todas as movimentações. Contas em moeda estrangeira convertem pra R$ pela cotação do dia do Banco Central. A primeira atualização pode demorar (precisa ler o histórico inteiro); as seguintes são rápidas.</p>
   <div class="param-row">
     <button class="btn btn-primary" onclick="atualizarPosicaoCaixa()" id="btn-atualizar-posicao">Atualizar posição de caixa</button>
+    <button class="btn btn-secondary" onclick="diagnosticarContaCaixaUI()" id="btn-diagnostico-conta">Diagnóstico C6 Flutu</button>
     <span class="hint" id="posicao-caixa-status"></span>
   </div>
+  <pre id="posicao-caixa-diagnostico" style="display:none;white-space:pre-wrap;font-size:.78rem;background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:12px;margin-bottom:16px"></pre>
   <div class="table-wrap">
     <table>
       <thead><tr><th>Conta</th><th>Moeda</th><th>Saldo</th><th>Câmbio (Bacen)</th><th>Em R$</th></tr></thead>
@@ -1697,8 +1699,11 @@ function calcIndicadores() {
   const margem = receitasPagas > 0 ? (LL / receitasPagas * 100) : null;
 
   const t = today(), t30 = addDays(t, 30);
-  let saldo = 0;
-  data.filter(r => r.status === 'pago').forEach(r => { saldo += r.tipo === 'receber' ? r.valor : -r.valor; });
+  let saldo = saldoRealCalculado;
+  if (saldo === null) {
+    saldo = 0;
+    data.filter(r => r.status === 'pago').forEach(r => { saldo += r.tipo === 'receber' ? r.valor : -r.valor; });
+  }
   const recv30 = data.filter(r => r.tipo === 'receber' && r.status !== 'pago' && r.vencimento >= t && r.vencimento <= t30).reduce((s,r)=>s+r.valor,0);
   const pag30  = data.filter(r => r.tipo === 'pagar'  && r.status !== 'pago' && r.vencimento >= t && r.vencimento <= t30).reduce((s,r)=>s+r.valor,0);
   const liquidez = pag30 > 0 ? (saldo + recv30) / pag30 : null;
@@ -1773,6 +1778,21 @@ async function renderSaldosMoeda() {
     </tr>`;
   }).join('');
   document.getElementById('saldo-moeda-total').textContent = fmt(total);
+}
+
+// Diagnóstico temporário — investigar por que C6 Flutu deu R$32.771,53
+// calculado quando o Bling mostra saldo zerado. Remover depois de resolvido.
+async function diagnosticarContaCaixaUI() {
+  const pre = document.getElementById('posicao-caixa-diagnostico');
+  pre.style.display = 'block';
+  pre.textContent = 'Consultando...';
+  try {
+    const resp = await fetch('/api/erp/sync', { method: 'POST', headers: await erpAuthHeader(), body: JSON.stringify({ provider: 'bling', tipo: 'diagnostico_conta', contaFinanceiraId: '14892626331' }) });
+    const data = await resp.json();
+    pre.textContent = JSON.stringify(data, null, 2);
+  } catch (e) {
+    pre.textContent = 'Erro: ' + e.message;
+  }
 }
 
 // Recalcula saldoRealCalculado a partir da posição de caixa (ver acima) e

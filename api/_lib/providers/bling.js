@@ -249,7 +249,7 @@ export const bling = {
   // paginar tudo aqui dentro) porque isso pode ser muita coisa pra uma
   // function só (ver sincronizarPosicaoCaixa em sync.js, que pagina aos
   // poucos e retoma na próxima chamada).
-  async fetchPaginaCaixas({ accessToken }, { dataInicial, dataFinal, pagina }) {
+  async fetchPaginaCaixas({ accessToken }, { dataInicial, dataFinal, pagina, idContaFinanceira }) {
     const params = new URLSearchParams({
       pagina: String(pagina),
       limite: String(POR_PAGINA),
@@ -257,6 +257,7 @@ export const bling = {
       dataFinal,
       situacao: 'R', // só lançamentos registrados, exclui excluídos
     });
+    if (idContaFinanceira) params.set('idContaFinanceira', String(idContaFinanceira));
     const resp = await getComRetry429(`${API_BASE}/caixas?${params}`, accessToken);
     if (!resp.ok) throw new Error(`Bling /caixas falhou: ${resp.status} ${await resp.text()}`);
     return (await resp.json())?.data || [];
