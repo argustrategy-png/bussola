@@ -73,6 +73,53 @@ const TOOLS = [
 function today() { return new Date().toISOString().split('T')[0]; }
 function addDays(dateStr, n) { const d = new Date(dateStr + 'T12:00:00'); d.setDate(d.getDate() + n); return d.toISOString().split('T')[0]; }
 
+// Lançamentos do ERP guardam o valor na moeda original (ver
+// supabase-migration-lancamentos-moeda.sql) — sem isso, um lançamento em
+// USD/EUR entrava na soma como se fosse R$ (mesmo bug já corrigido no
+// Painel/Indicadores do frontend; aqui é a mesma correção, só que do lado
+// do assistente). Cotação do dia via Banco Central, sem cache entre
+// invocações (poucas moedas distintas, custo baixo).
+async function buscarCotacaoBacen(moeda) {
+  if (!moeda || moeda === 'BRL') return 1;
+  const hoje = new Date();
+  for (let voltar = 0; voltar <= 8; voltar++) {
+    const d = new Date(hoje); d.setDate(d.getDate() - voltar);
+    const mmddyyyy = `${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}-${d.getFullYear()}`;
+    const url = `https://olinda.bcb.gov.br/olinda/servico/PTAX/versao/v1/odata/CotacaoMoedaDia(moeda=@moeda,dataCotacao=@dataCotacao)?@moeda='${moeda}'&@dataCotacao='${mmddyyyy}'&$format=json`;
+    try {
+      const resp = await fetch(url);
+      if (!resp.ok) continue;
+      const json = await resp.json();
+      const ultimo = (json.value || []).slice(-1)[0];
+      if (!ultimo) continue; // sem boletim nesse dia (fim de semana/feriado) — tenta o dia anterior
+      return (ultimo.cotacaoCompra + ultimo.cotacaoVenda) / 2;
+    } catch { /* rede fora do ar — tenta o dia anterior */ }
+  }
+  return 1; // sem cotação disponível: não converte, melhor que quebrar a conta
+}
+
+async function taxasPorMoeda(linhas) {
+  const distintas = [...new Set(linhas.map((r) => r.moeda || 'BRL'))];
+  const mapa = {};
+  await Promise.all(distintas.map(async (m) => { mapa[m] = await buscarCotacaoBacen(m); }));
+  return mapa;
+}
+
+function valorConvertido(r, taxas) {
+  return (Number(r.valor) || 0) * (taxas[r.moeda || 'BRL'] ?? 1);
+}
+
+// Saldo real (posição de caixa — soma das contas de Caixas e Bancos do
+// Bling, já convertida), a mesma fonte que o Painel/Indicadores usam desde
+// que pararam de somar "tudo que já foi pago" — ver renderDashboard no
+// index.html. null quando não há posição calculada (sem Bling conectado).
+async function saldoCaixaCalculado(subscriberId) {
+  const rows = await supabaseSelect(subscriberId, 'select=valor,moeda&conta_financeira_id=not.is.null', 'saldos_caixas');
+  if (!rows.length) return null;
+  const taxas = await taxasPorMoeda(rows);
+  return rows.reduce((s, r) => s + valorConvertido(r, taxas), 0);
+}
+
 async function supabaseSelect(subscriberId, query, tabela = 'lancamentos') {
   const resp = await fetch(
     `${process.env.SUPABASE_URL}/rest/v1/${tabela}?subscriber_id=eq.${subscriberId}&${query}`,
@@ -84,7 +131,7 @@ async function supabaseSelect(subscriberId, query, tabela = 'lancamentos') {
 
 async function executarFerramenta(nome, input, subscriberId) {
   if (nome === 'buscar_lancamentos') {
-    const params = ['select=tipo,descricao,valor,vencimento,categoria,status,contraparte,toc'];
+    const params = ['select=tipo,descricao,valor,moeda,vencimento,categoria,status,contraparte,toc'];
     if (input.tipo) params.push(`tipo=eq.${encodeURIComponent(input.tipo)}`);
     if (input.status) params.push(`status=eq.${encodeURIComponent(input.status)}`);
     if (input.categoria) params.push(`categoria=ilike.*${encodeURIComponent(input.categoria)}*`);
@@ -94,20 +141,33 @@ async function executarFerramenta(nome, input, subscriberId) {
     const limite = Math.min(Number(input.limite) || 30, 100);
     params.push(`limit=${limite}`, 'order=vencimento.asc');
     const rows = await supabaseSelect(subscriberId, params.join('&'));
-    return { total_encontrado: rows.length, lancamentos: rows };
+    const taxas = await taxasPorMoeda(rows);
+    const lancamentos = rows.map(({ moeda, ...r }) => (
+      moeda && moeda !== 'BRL'
+        ? { ...r, valor: valorConvertido({ valor: r.valor, moeda }, taxas), valor_original: r.valor, moeda_original: moeda }
+        : r
+    ));
+    return { total_encontrado: lancamentos.length, valores_em: 'R$ (já convertidos, se havia moeda estrangeira)', lancamentos };
   }
   if (nome === 'resumo_financeiro') {
     const t = today(), t30 = addDays(t, 30);
-    const pagos = await supabaseSelect(subscriberId, 'select=tipo,valor&status=eq.pago');
-    const saldo = pagos.reduce((s, r) => s + (r.tipo === 'receber' ? r.valor : -r.valor), 0);
-    const proximos = await supabaseSelect(subscriberId, `select=tipo,valor,vencimento&status=eq.pendente&vencimento=gte.${t}&vencimento=lte.${t30}`);
-    const aReceber30d = proximos.filter(r => r.tipo === 'receber').reduce((s, r) => s + r.valor, 0);
-    const aPagar30d = proximos.filter(r => r.tipo === 'pagar').reduce((s, r) => s + r.valor, 0);
-    const vencidos = await supabaseSelect(subscriberId, `select=tipo,valor&status=eq.pendente&vencimento=lt.${t}`);
-    const vencidoPagar = vencidos.filter(r => r.tipo === 'pagar').reduce((s, r) => s + r.valor, 0);
-    const vencidoReceber = vencidos.filter(r => r.tipo === 'receber').reduce((s, r) => s + r.valor, 0);
+    let saldo = await saldoCaixaCalculado(subscriberId);
+    if (saldo === null) {
+      const pagos = await supabaseSelect(subscriberId, 'select=tipo,valor,moeda&status=eq.pago');
+      const taxasPagos = await taxasPorMoeda(pagos);
+      saldo = pagos.reduce((s, r) => s + (r.tipo === 'receber' ? valorConvertido(r, taxasPagos) : -valorConvertido(r, taxasPagos)), 0);
+    }
+    const proximos = await supabaseSelect(subscriberId, `select=tipo,valor,moeda,vencimento&status=eq.pendente&vencimento=gte.${t}&vencimento=lte.${t30}`);
+    const taxasProximos = await taxasPorMoeda(proximos);
+    const aReceber30d = proximos.filter(r => r.tipo === 'receber').reduce((s, r) => s + valorConvertido(r, taxasProximos), 0);
+    const aPagar30d = proximos.filter(r => r.tipo === 'pagar').reduce((s, r) => s + valorConvertido(r, taxasProximos), 0);
+    const vencidos = await supabaseSelect(subscriberId, `select=tipo,valor,moeda&status=eq.pendente&vencimento=lt.${t}`);
+    const taxasVencidos = await taxasPorMoeda(vencidos);
+    const vencidoPagar = vencidos.filter(r => r.tipo === 'pagar').reduce((s, r) => s + valorConvertido(r, taxasVencidos), 0);
+    const vencidoReceber = vencidos.filter(r => r.tipo === 'receber').reduce((s, r) => s + valorConvertido(r, taxasVencidos), 0);
     return {
       data_hoje: t,
+      valores_em: 'R$ (lançamentos em moeda estrangeira já convertidos pela cotação do dia)',
       saldo_atual: saldo,
       a_receber_proximos_30_dias: aReceber30d,
       a_pagar_proximos_30_dias: aPagar30d,
