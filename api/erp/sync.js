@@ -149,9 +149,10 @@ async function sincronizarMoedaLancamentos(inicioHandler, subscriberId, provider
   }
   const LIMITE_MS = 55_000;
   const ESPACO_MS = 350;
+  const LIMITE_LOTE = 300;
 
   const moedaMap = await getContaFinanceiraMoedaMap(subscriberId, providerName);
-  const pendentes = await getLancamentosSemMoeda(subscriberId, 300);
+  const pendentes = await getLancamentosSemMoeda(subscriberId, LIMITE_LOTE);
   console.log(`moeda_lancamentos: ${Object.keys(moedaMap).length} contas financeiras conhecidas, ${pendentes.length} lançamentos pendentes de moeda`);
 
   let resolvidos = 0;
@@ -165,9 +166,16 @@ async function sincronizarMoedaLancamentos(inicioHandler, subscriberId, provider
     await patchLancamentoMoeda(lanc.id, moeda);
     resolvidos++;
   }
+  // Só está de fato concluído se esse lote (limitado a LIMITE_LOTE) veio
+  // menor que o limite — senão pode haver mais pendentes além dele — E se
+  // deu tempo de resolver todo mundo dentro dele. Antes disso, "terminar de
+  // processar o lote" estava sendo confundido com "não sobrou mais nada"
+  // (bug visto em produção: relatou concluído com 610 lançamentos ainda
+  // sem moeda, porque cada chamada só enxerga até 300 por vez).
 
   console.log(`moeda_lancamentos: resolvidos ${resolvidos}/${pendentes.length}`);
-  return { ok: true, concluido: resolvidos >= pendentes.length, resolvidos, restantes: pendentes.length - resolvidos };
+  const concluido = resolvidos === pendentes.length && pendentes.length < LIMITE_LOTE;
+  return { ok: true, concluido, resolvidos, restantes: pendentes.length - resolvidos };
 }
 
 // Orçamento de tempo pra resolver nomes de contato novos, calculado com o que
