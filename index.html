@@ -1307,10 +1307,25 @@ function showSync(msg, err) {
 }
 
 // ── Load from Supabase ───────────────────────────────────
+// O Supabase corta qualquer select sem paginação em 1000 linhas (limite do
+// PostgREST) — silenciosamente, sem erro. Contas com mais de 1000
+// lançamentos (comum depois de meses de sync com ERP) perdiam justo os mais
+// recentes/futuros, já que a ordenação é do mais antigo pro mais novo — os
+// cards "próx. 30d" ficavam sempre zerados (visto em produção: conta com
+// 1740 lançamentos, tudo depois de ~2025 sumia). Busca em páginas de 1000
+// até vir uma página incompleta.
 async function loadData() {
-  const { data: rows, error } = await sb.from('lancamentos').select('*').order('vencimento', { ascending: true });
-  if (error) { showSync('Erro ao carregar dados ✗', true); return; }
-  data = rows || [];
+  const PAGINA = 1000;
+  let todos = [];
+  for (let pagina = 0; ; pagina++) {
+    const { data: rows, error } = await sb.from('lancamentos').select('*')
+      .order('vencimento', { ascending: true })
+      .range(pagina * PAGINA, pagina * PAGINA + PAGINA - 1);
+    if (error) { showSync('Erro ao carregar dados ✗', true); return; }
+    todos = todos.concat(rows || []);
+    if (!rows || rows.length < PAGINA) break;
+  }
+  data = todos;
   refreshAll();
 }
 
