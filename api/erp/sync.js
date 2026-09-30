@@ -152,6 +152,7 @@ async function sincronizarMoedaLancamentos(inicioHandler, subscriberId, provider
 
   const moedaMap = await getContaFinanceiraMoedaMap(subscriberId, providerName);
   const pendentes = await getLancamentosSemMoeda(subscriberId, 300);
+  console.log(`moeda_lancamentos: ${Object.keys(moedaMap).length} contas financeiras conhecidas, ${pendentes.length} lançamentos pendentes de moeda`);
 
   let resolvidos = 0;
   for (let i = 0; i < pendentes.length; i++) {
@@ -165,6 +166,7 @@ async function sincronizarMoedaLancamentos(inicioHandler, subscriberId, provider
     resolvidos++;
   }
 
+  console.log(`moeda_lancamentos: resolvidos ${resolvidos}/${pendentes.length}`);
   return { ok: true, concluido: resolvidos >= pendentes.length, resolvidos, restantes: pendentes.length - resolvidos };
 }
 
