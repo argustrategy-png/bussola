@@ -514,7 +514,7 @@
 
   <div class="section-title">Rentabilidade</div>
   <div class="cards">
-    <div class="card blue"><label>Receita Recebida</label><div class="val" id="k-receita">R$ 0</div><div class="sub">Total já recebido</div></div>
+    <div class="card blue"><label>Receita Recebida (últimos 3 meses)</label><div class="val" id="k-receita">R$ 0</div><div class="sub">Recebido nos últimos 90 dias — não é o total histórico</div></div>
   </div>
 
   <div class="section-title">Caixa e Liquidez</div>
@@ -1714,6 +1714,11 @@ function calcIndicadores() {
   const margem = receitasPagas > 0 ? (LL / receitasPagas * 100) : null;
 
   const t = today(), t30 = addDays(t, 30);
+  // Card "Receita Recebida" mostra só os últimos 3 meses (não o acumulado
+  // desde sempre, que é o que `receitasPagas` continua sendo — usado na
+  // margem/lucro líquido, que não muda aqui) — pedido do usuário pra ter uma
+  // leitura de curto prazo em vez do total histórico.
+  const receita3Meses = data.filter(r => r.tipo === 'receber' && r.status === 'pago' && r.vencimento >= addDays(t, -90) && r.vencimento <= t).reduce((s,r)=>s+r.valor,0);
   let saldo = saldoRealCalculado;
   if (saldo === null) {
     saldo = 0;
@@ -1727,7 +1732,7 @@ function calcIndicadores() {
   const despesaMedia = despesasTotais / mesesDistintosPagos();
   const folego = despesaMedia > 0 ? saldo / despesaMedia : null;
 
-  return { receitasPagas, ctvPago, doPago, despesasTotais, LL, margem, saldo, recv30, pag30, liquidez, capGiro, folego };
+  return { receitasPagas, receita3Meses, ctvPago, doPago, despesasTotais, LL, margem, saldo, recv30, pag30, liquidez, capGiro, folego };
 }
 
 // ── Posição de caixa (Caixas e Bancos) — digitada, não sincronizada ────────
@@ -1862,7 +1867,7 @@ async function atualizarPosicaoCaixa() {
 function renderIndicadores() {
   const k = calcIndicadores();
 
-  document.getElementById('k-receita').textContent = fmt(k.receitasPagas);
+  document.getElementById('k-receita').textContent = fmt(k.receita3Meses);
   document.getElementById('k-capgiro').textContent = fmt(k.capGiro);
   renderSaldosMoeda();
 
