@@ -16,49 +16,11 @@ import {
   deleteSyncEstado,
   getSaldosCaixasCalculados,
   upsertSaldosCaixas,
+  getContaFinanceiraMoedaMap,
+  getLancamentosSemMoeda,
+  patchLancamentoMoeda,
+  patchLancamentosMoedaEmLote,
 } from '../_lib/supabase.js';
-
-// Diagnóstico temporário: dump bruto de todas as movimentações de UMA conta
-// financeira, sem gravar nada — usado pra investigar por que C6 Flutu deu
-// R$32.771,53 quando o Bling mostra saldo zerado (Wise CAD/USD bateram
-// certo com a mesma lógica, então suspeita de algo específico dessa conta:
-// ID duplicado entre páginas, ou lançamentos de transferência interna que
-// o Bling não conta no saldo mas nós estamos contando).
-async function diagnosticarContaCaixa(inicioHandler, provider, ctx, contaFinanceiraId) {
-  const LIMITE_MS = 55_000;
-  const ESPACO_PAGINAS_MS = 350;
-  const dataFinalHoje = new Date().toISOString().slice(0, 10);
-  const idsVistos = new Set();
-  const duplicados = [];
-  const porCategoria = {};
-  let qtdC = 0, somaC = 0, qtdD = 0, somaD = 0, pagina = 1;
-
-  while (Date.now() - inicioHandler < LIMITE_MS) {
-    if (pagina > 1) await new Promise((r) => setTimeout(r, ESPACO_PAGINAS_MS));
-    const registros = await provider.fetchPaginaCaixas(ctx, {
-      dataInicial: ANCHOR_INICIO_POSICAO_CAIXA, dataFinal: dataFinalHoje, pagina, idContaFinanceira: contaFinanceiraId,
-    });
-    if (!registros.length) break;
-    for (const r of registros) {
-      if (idsVistos.has(r.id)) duplicados.push(r.id); else idsVistos.add(r.id);
-      const cat = r.categoria?.descricao || r.descricao || 'sem categoria';
-      if (!porCategoria[cat]) porCategoria[cat] = { qtd: 0, soma: 0 };
-      porCategoria[cat].qtd++;
-      porCategoria[cat].soma += Number(r.valor) || 0;
-      if (r.debCred === 'C') { qtdC++; somaC += Number(r.valor) || 0; } else { qtdD++; somaD += Number(r.valor) || 0; }
-    }
-    pagina++;
-  }
-
-  const resumo = {
-    contaFinanceiraId, totalRegistros: idsVistos.size, paginasLidas: pagina - 1,
-    qtdC, somaC, qtdD, somaD, liquido: somaC + somaD,
-    duplicados: duplicados.length, idsDuplicados: duplicados.slice(0, 10),
-    porCategoria: Object.fromEntries(Object.entries(porCategoria).map(([k, v]) => [k, { qtd: v.qtd, soma: Number(v.soma.toFixed(2)) }])),
-  };
-  console.log('posicao_caixa diagnostico_conta:', JSON.stringify(resumo));
-  return { ok: true, resumo };
-}
 
 // Ponto de partida quando ainda não existe nenhum saldo calculado pra essa
 // conta — bem anterior a qualquer empresa usando o MeuArgus, só pra
@@ -104,9 +66,10 @@ async function sincronizarPosicaoCaixa(inicioHandler, subscriberId, providerName
         dataInicial: proximoDia.toISOString().slice(0, 10),
         acumulado: Object.fromEntries(existentes.map((r) => [r.conta_financeira_id, { descricao: r.nome, soma: Number(r.valor) }])),
         maiorData: maiorDataAnterior,
+        duplicataMoedas: {},
       };
     } else {
-      estado = { pagina: 1, dataInicial: ANCHOR_INICIO_POSICAO_CAIXA, acumulado: {}, maiorData: null };
+      estado = { pagina: 1, dataInicial: ANCHOR_INICIO_POSICAO_CAIXA, acumulado: {}, maiorData: null, duplicataMoedas: {} };
     }
   }
 
@@ -114,6 +77,7 @@ async function sincronizarPosicaoCaixa(inicioHandler, subscriberId, providerName
   let pagina = estado.pagina;
   const acumulado = estado.acumulado;
   let maiorData = estado.maiorData;
+  const duplicataMoedas = estado.duplicataMoedas || {};
   let concluido = false;
 
   // O `valor` que o Bling devolve em /caixas já vem com o sinal certo
@@ -131,6 +95,14 @@ async function sincronizarPosicaoCaixa(inicioHandler, subscriberId, providerName
       acumulado[contaId].descricao = descricao;
       acumulado[contaId].soma += Number(r.valor) || 0;
       if (!maiorData || r.data > maiorData) maiorData = r.data;
+
+      // Lançamento pago que gerou essa movimentação — a conta financeira que
+      // liquidou (ex.: Wise USD) diz a moeda real do lançamento, sem
+      // precisar de mais nenhuma chamada extra (reaproveita o que já estava
+      // sendo buscado aqui mesmo).
+      if (r.origem?.tipo === 'duplicata' && r.origem?.id) {
+        duplicataMoedas[String(r.origem.id)] = inferirMoedaPosicaoCaixa(descricao);
+      }
     }
     pagina++;
   }
@@ -147,12 +119,53 @@ async function sincronizarPosicaoCaixa(inicioHandler, subscriberId, providerName
     }));
     const r = await upsertSaldosCaixas(registros);
     if (!r.ok) throw new Error(`Falha ao gravar posição de caixa: ${await r.text()}`);
+
+    const porMoeda = {};
+    for (const [duplicataId, moeda] of Object.entries(duplicataMoedas)) {
+      (porMoeda[moeda] ||= []).push(`${providerName}:${duplicataId}`);
+    }
+    for (const [moeda, erpIds] of Object.entries(porMoeda)) {
+      await patchLancamentosMoedaEmLote(erpIds, moeda);
+    }
+
     await deleteSyncEstado(subscriberId, providerName, 'posicao_caixa');
     return { ok: true, concluido: true, contas: registros.length };
   }
 
-  await saveSyncEstado(subscriberId, providerName, 'posicao_caixa', { pagina, dataInicial: estado.dataInicial, acumulado, maiorData });
+  await saveSyncEstado(subscriberId, providerName, 'posicao_caixa', { pagina, dataInicial: estado.dataInicial, acumulado, maiorData, duplicataMoedas });
   return { ok: true, concluido: false, paginaAtual: pagina };
+}
+
+// Moeda dos lançamentos PENDENTES (ainda não pagos, então sem movimentação
+// de caixa pra linkar) — só dá pra saber via o "portador" no detalhe de
+// cada conta (GET /contas/{tipo}/{id}), que é o mesmo ID de conta
+// financeira já resolvido pela posição de caixa. Resumível sem precisar de
+// sync_estado: cada lançamento resolvido já grava moeda != null na hora, e
+// a query de "quem falta" (moeda is null) simplesmente encolhe a cada
+// chamada — não tem cursor pra perder.
+async function sincronizarMoedaLancamentos(inicioHandler, subscriberId, providerName, provider, ctx) {
+  if (typeof provider.fetchPortadorConta !== 'function') {
+    return { ok: false, error: 'provider_sem_suporte_moeda_lancamentos' };
+  }
+  const LIMITE_MS = 55_000;
+  const ESPACO_MS = 350;
+
+  const moedaMap = await getContaFinanceiraMoedaMap(subscriberId, providerName);
+  const pendentes = await getLancamentosSemMoeda(subscriberId, 300);
+
+  let resolvidos = 0;
+  for (let i = 0; i < pendentes.length; i++) {
+    if (Date.now() - inicioHandler >= LIMITE_MS) break;
+    if (i > 0) await new Promise((r) => setTimeout(r, ESPACO_MS));
+    const lanc = pendentes[i];
+    const blingId = lanc.erp_id.replace(/^bling:/, '');
+    const portadorId = await provider.fetchPortadorConta(ctx, lanc.tipo, blingId);
+    const moeda = (portadorId && moedaMap[portadorId]) || 'BRL';
+    await patchLancamentoMoeda(lanc.id, moeda);
+    resolvidos++;
+  }
+
+  return { ok: true, concluido: resolvidos >= pendentes.length, resolvidos, restantes: pendentes.length - resolvidos };
 }
 
 // Orçamento de tempo pra resolver nomes de contato novos, calculado com o que
@@ -171,7 +184,7 @@ export default async function handler(req, res) {
   const inicioHandler = Date.now();
   if (req.method !== 'POST') return res.status(405).json({ error: 'method_not_allowed' });
 
-  const { provider: providerName, tipo, contaFinanceiraId } = req.body || {};
+  const { provider: providerName, tipo } = req.body || {};
   if (!providerName) return res.status(400).json({ error: 'provider obrigatório' });
 
   const subscriberId = await getAuthenticatedSubscriber(req);
@@ -215,8 +228,8 @@ export default async function handler(req, res) {
       const resultado = await sincronizarPosicaoCaixa(inicioHandler, subscriberId, providerName, provider, ctx);
       return res.status(200).json(resultado);
     }
-    if (tipo === 'diagnostico_conta') {
-      const resultado = await diagnosticarContaCaixa(inicioHandler, provider, ctx, contaFinanceiraId);
+    if (tipo === 'moeda_lancamentos') {
+      const resultado = await sincronizarMoedaLancamentos(inicioHandler, subscriberId, providerName, provider, ctx);
       return res.status(200).json(resultado);
     }
 

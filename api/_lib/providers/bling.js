@@ -106,6 +106,20 @@ export const bling = {
     return fetchTodasPaginas(`/contas/${tipo}`, accessToken, `contas/${tipo}`);
   },
 
+  // Moeda de uma conta a pagar/receber: não vem na listagem em massa, só no
+  // detalhe (GET /contas/{tipo}/{id}), no campo `portador` — confirmado
+  // contra o OpenAPI oficial que `idPortador` (filtro do endpoint de
+  // listagem) é "ID da conta financeira", ou seja, é a mesma conta de
+  // Caixas e Bancos (Wise USD etc.), só que sem trazer o nome — por isso
+  // ainda precisa cruzar com o mapa de conta_financeira_id → moeda que a
+  // posição de caixa já resolve.
+  async fetchPortadorConta({ accessToken }, tipo, id) {
+    const resp = await getComRetry429(`${API_BASE}/contas/${tipo}/${id}`, accessToken);
+    if (!resp.ok) return null;
+    const dados = (await resp.json())?.data;
+    return dados?.portador?.id ? String(dados.portador.id) : null;
+  },
+
   // Confirmado contra o OpenAPI oficial do Bling (ContasDadosBaseDTO): a
   // listagem só traz id/situacao/vencimento/valor/contato.id — sem nome do
   // contato, categoria ou histórico. O nome vem à parte via fetchContatoNomes
@@ -249,7 +263,7 @@ export const bling = {
   // paginar tudo aqui dentro) porque isso pode ser muita coisa pra uma
   // function só (ver sincronizarPosicaoCaixa em sync.js, que pagina aos
   // poucos e retoma na próxima chamada).
-  async fetchPaginaCaixas({ accessToken }, { dataInicial, dataFinal, pagina, idContaFinanceira }) {
+  async fetchPaginaCaixas({ accessToken }, { dataInicial, dataFinal, pagina }) {
     const params = new URLSearchParams({
       pagina: String(pagina),
       limite: String(POR_PAGINA),
@@ -257,7 +271,6 @@ export const bling = {
       dataFinal,
       situacao: 'R', // só lançamentos registrados, exclui excluídos
     });
-    if (idContaFinanceira) params.set('idContaFinanceira', String(idContaFinanceira));
     const resp = await getComRetry429(`${API_BASE}/caixas?${params}`, accessToken);
     if (!resp.ok) throw new Error(`Bling /caixas falhou: ${resp.status} ${await resp.text()}`);
     return (await resp.json())?.data || [];

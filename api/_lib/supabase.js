@@ -168,3 +168,50 @@ export async function upsertSaldosCaixas(registros) {
     body: JSON.stringify(registros),
   });
 }
+
+// Mapa conta_financeira_id → moeda, já resolvido pela posição de caixa —
+// reaproveitado pra descobrir a moeda de contas a pagar/receber via o
+// "portador" (ver fetchPortadorConta).
+export async function getContaFinanceiraMoedaMap(subscriberId, provider) {
+  const resp = await fetch(
+    `${process.env.SUPABASE_URL}/rest/v1/saldos_caixas?subscriber_id=eq.${subscriberId}&provider=eq.${provider}&conta_financeira_id=not.is.null&select=conta_financeira_id,moeda`,
+    { headers: serviceHeaders() }
+  );
+  if (!resp.ok) return {};
+  const rows = await resp.json();
+  const mapa = {};
+  (rows || []).forEach((r) => { mapa[r.conta_financeira_id] = r.moeda; });
+  return mapa;
+}
+
+// Lançamentos do ERP ainda sem moeda resolvida (ver migração
+// supabase-migration-lancamentos-moeda.sql — NULL = nunca verificado).
+export async function getLancamentosSemMoeda(subscriberId, limite) {
+  const resp = await fetch(
+    `${process.env.SUPABASE_URL}/rest/v1/lancamentos?subscriber_id=eq.${subscriberId}&origem=eq.erp&moeda=is.null&erp_id=like.bling:*&select=id,erp_id,tipo&limit=${limite}`,
+    { headers: serviceHeaders() }
+  );
+  if (!resp.ok) return [];
+  return resp.json();
+}
+
+export async function patchLancamentoMoeda(id, moeda) {
+  return fetch(`${process.env.SUPABASE_URL}/rest/v1/lancamentos?id=eq.${id}`, {
+    method: 'PATCH',
+    headers: serviceHeaders({ 'Content-Type': 'application/json' }),
+    body: JSON.stringify({ moeda }),
+  });
+}
+
+// Marca lançamentos como moeda='BRL' via update em massa por lista de IDs —
+// usado pra resolver de uma vez os que a movimentação de caixa já provou
+// serem BRL (ver sincronizarPosicaoCaixa), sem 1 patch por registro.
+export async function patchLancamentosMoedaEmLote(ids, moeda) {
+  if (!ids.length) return { ok: true };
+  const idsParam = ids.map((id) => encodeURIComponent(id)).join(',');
+  return fetch(`${process.env.SUPABASE_URL}/rest/v1/lancamentos?erp_id=in.(${idsParam})`, {
+    method: 'PATCH',
+    headers: serviceHeaders({ 'Content-Type': 'application/json' }),
+    body: JSON.stringify({ moeda }),
+  });
+}
