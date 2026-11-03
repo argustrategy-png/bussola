@@ -341,6 +341,11 @@
       <div class="form-field"><label>Observações</label>
         <textarea id="f-obs" placeholder="Notas internas…"></textarea>
       </div>
+      <div class="form-field" id="f-modulos-box"><label>Módulos</label>
+        <label style="display:flex;gap:8px;align-items:center;font-weight:500;cursor:pointer">
+          <input type="checkbox" id="f-mod-precificacao" style="width:auto"> Precificação (insumos, receitas e mark-up)
+        </label>
+      </div>
     </div>
     <div class="modal-footer">
       <button class="btn btn-outline" onclick="closeModal()">Cancelar</button>
@@ -534,7 +539,9 @@ sb.auth.onAuthStateChange((event, session) => {
 })();
 
 // ── STATE ────────────────────────────────────
-let all = [];          // todos do Supabase
+let all = [];
+let modulos = {};             // subscriber_id → { precificacao }
+let modulosDisponiveis = false;          // todos do Supabase
 let filtered = [];     // após filtros
 let sortField = 'cadastro', sortAsc = false;
 let currentPage = 1;
@@ -548,6 +555,11 @@ async function loadAll() {
   showLoading(false);
   if (error) { toast('Erro ao carregar dados: ' + error.message, 'err'); return; }
   all = data || [];
+  // Chaves de módulos (só admin grava — ver supabase-migration-precificacao.sql).
+  // Se a migração ainda não rodou, a tabela não existe: esconde a opção.
+  const mod = await sb.from('modulos_assinante').select('subscriber_id,precificacao');
+  modulosDisponiveis = !mod.error;
+  modulos = Object.fromEntries((mod.data || []).map(m => [m.subscriber_id, m]));
   renderStats();
   applyFilters();
 }
@@ -655,6 +667,8 @@ function openModal(id) {
   document.getElementById('f-cadastro').value = s.cadastro||'';
   document.getElementById('f-expira').value   = s.expira||'';
   document.getElementById('f-obs').value      = s.obs||'';
+  document.getElementById('f-modulos-box').style.display = modulosDisponiveis ? '' : 'none';
+  document.getElementById('f-mod-precificacao').checked = !!modulos[s.id]?.precificacao;
   document.getElementById('modal-form').classList.add('open');
 }
 function closeModal() { document.getElementById('modal-form').classList.remove('open'); }
@@ -681,6 +695,13 @@ async function saveSubscriber() {
   showLoading(false);
 
   if (error) { toast('Erro: ' + error.message, 'err'); return; }
+  if (modulosDisponiveis) {
+    const precificacao = document.getElementById('f-mod-precificacao').checked;
+    if (precificacao !== !!modulos[editingId]?.precificacao) {
+      const r = await sb.from('modulos_assinante').upsert({ subscriber_id: editingId, precificacao, updated_at: new Date().toISOString() });
+      if (r.error) { toast('Erro ao salvar módulos: ' + r.error.message, 'err'); return; }
+    }
+  }
   toast('Assinante atualizado ✓');
   closeModal();
   await loadAll();
@@ -785,6 +806,7 @@ function viewSubscriber(id) {
     <div class="info-item"><label>E-mail</label><div class="val" style="word-break:break-all">${esc(s.email)}</div></div>
     <div class="info-item"><label>Cadastro</label><div class="val">${fmtDate(s.cadastro)}</div></div>
     <div class="info-item"><label>Expiração</label><div class="val">${fmtDate(s.expira)}</div></div>
+    ${modulosDisponiveis ? `<div class="info-item"><label>Precificação</label><div class="val">${modulos[s.id]?.precificacao ? '✅ Liberada' : '—'}</div></div>` : ''}
     <div class="info-item"><label>Último acesso</label><div class="val">${fmtDate(s.ultimo_acesso)}</div></div>
     <div class="info-item"><label>ID</label><div class="val" style="font-size:.72rem;color:var(--text2)">${esc(s.id)}</div></div>
     ${s.obs ? `<div class="info-item full"><label>Observações</label><div class="val" style="color:var(--text2)">${esc(s.obs)}</div></div>` : ''}

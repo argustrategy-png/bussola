@@ -15,7 +15,7 @@
 // function call em candidates[0].content.parts[].functionCall, resultado
 // devolvido como parts[].functionResponse com role 'user'.
 
-import { getAuthenticatedSubscriber } from '../_lib/supabase.js';
+import { getAuthenticatedSubscriber, assinaturaAtiva } from '../_lib/supabase.js';
 
 const MODEL = 'gemini-3.8-flash';
 const GEMINI_API = `https://generativelanguage.googleapis.com/v1beta/models/${MODEL}:generateContent`;
@@ -36,19 +36,6 @@ function historicoCompacto(contents) {
   return recentes;
 }
 
-// O paywall do app é só na tela; aqui, que gasta dinheiro de verdade, confere
-// no banco: admin, assinatura ativa ou teste grátis ainda dentro do prazo.
-async function assinaturaAtiva(subscriberId) {
-  const resp = await fetch(
-    `${process.env.SUPABASE_URL}/rest/v1/subscribers?id=eq.${subscriberId}&select=status,expira,is_admin`,
-    { headers: { apikey: process.env.SUPABASE_SERVICE_ROLE_KEY, Authorization: `Bearer ${process.env.SUPABASE_SERVICE_ROLE_KEY}` } }
-  );
-  if (!resp.ok) return false;
-  const [s] = await resp.json();
-  if (!s) return false;
-  if (s.is_admin || s.status === 'ativo') return true;
-  return s.status === 'trial' && !!s.expira && s.expira >= today();
-}
 
 const TOOLS = [
   {

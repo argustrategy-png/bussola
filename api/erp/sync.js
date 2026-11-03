@@ -4,6 +4,7 @@
 import { getProvider } from '../_lib/providers/index.js';
 import {
   getAuthenticatedSubscriber,
+  assinaturaAtiva,
   getIntegracao,
   patchIntegracao,
   upsertLancamentos,
@@ -199,6 +200,7 @@ export default async function handler(req, res) {
 
   const subscriberId = await getAuthenticatedSubscriber(req);
   if (!subscriberId) return res.status(401).json({ error: 'não autenticado' });
+  if (!(await assinaturaAtiva(subscriberId))) return res.status(402).json({ error: 'assinatura_inativa' });
 
   let provider;
   try {

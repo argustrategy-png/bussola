@@ -12,6 +12,23 @@ export async function getAuthenticatedSubscriber(req) {
   return user?.id || null;
 }
 
+// Mesma regra de public.assinatura_ativa() (supabase-migration-paywall.sql):
+// admin, assinatura ativa ou teste grátis dentro do prazo (data de Brasília).
+// As rotas que usam service_role passam por cima do RLS, então precisam
+// conferir isto por conta própria antes de gastar (Gemini, chamadas ao ERP).
+export async function assinaturaAtiva(subscriberId) {
+  const resp = await fetch(
+    `${process.env.SUPABASE_URL}/rest/v1/subscribers?id=eq.${subscriberId}&select=status,expira,is_admin`,
+    { headers: serviceHeaders() }
+  );
+  if (!resp.ok) return false;
+  const [s] = await resp.json();
+  if (!s) return false;
+  if (s.is_admin || s.status === 'ativo') return true;
+  const hojeBrasilia = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Sao_Paulo' });
+  return s.status === 'trial' && !!s.expira && s.expira >= hojeBrasilia;
+}
+
 function serviceHeaders(extra = {}) {
   return {
     apikey: process.env.SUPABASE_SERVICE_ROLE_KEY,

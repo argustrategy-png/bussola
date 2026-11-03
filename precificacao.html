@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Precificação · MeuArgus</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@600;700&family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<link rel="stylesheet" href="css/app.css">
+<link rel="stylesheet" href="css/precificacao.css">
+</head>
+<body>
+
+<header>
+  <div class="logo-mark">🏷️</div>
+  <div>
+    <h1>Precificação</h1>
+    <span>Insumos · receitas · mark-up</span>
+  </div>
+  <div class="header-actions">
+    <a class="pr-voltar" href="/app">← Fluxo de caixa</a>
+    <button class="theme-toggle" onclick="toggleTheme()" id="theme-toggle-app">🌙</button>
+  </div>
+</header>
+
+<div id="pr-aviso" class="pr-aviso" style="display:none"></div>
+
+<div id="pr-app" style="display:none">
+  <nav id="pr-nav">
+    <button data-aba="precificar" class="active">💲 Precificar</button>
+    <button data-aba="margens">📉 Margens</button>
+    <button data-aba="receitas">📒 Receitas</button>
+    <button data-aba="insumos">🧺 Insumos</button>
+  </nav>
+  <main class="pr-main" id="pr-conteudo"></main>
+</div>
+
+<div class="pr-scrim" data-act="fechar"></div>
+<aside class="pr-drawer" id="pr-drawer"></aside>
+<div class="pr-toast" id="pr-toast"></div>
+
+<!-- Scripts comuns (não módulos), na ordem: config cria o cliente do Supabase
+     e o tema; util tem formatação e escapeHtml; calculo é puro (testável). -->
+<script src="js/config.js"></script>
+<script src="js/util.js"></script>
+<script src="js/precificacao/calculo.js"></script>
+<script src="js/precificacao/app.js"></script>
+</body>
+</html>
