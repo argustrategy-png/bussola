@@ -450,7 +450,11 @@ function toast(msg, type='ok') {
 }
 function today() { return new Date().toISOString().split('T')[0]; }
 function fmtDate(d) { if (!d) return '—'; const [y,m,dd] = d.split('-'); return `${dd}/${m}/${y}`; }
-function initials(n) { return n.split(' ').slice(0,2).map(w=>w[0]||'').join('').toUpperCase(); }
+function initials(n) { return esc(String(n||'').split(' ').slice(0,2).map(w=>w[0]||'').join('').toUpperCase()); }
+// Nome, empresa, telefone e observação vêm do próprio assinante: escapar
+// sempre antes de pôr em innerHTML, senão um nome com <script> roda aqui
+// dentro, com a sessão de admin.
+function esc(v) { return String(v ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;'); }
 
 // ── AUTH ─────────────────────────────────────
 function showLoginError(msg) {
@@ -604,17 +608,17 @@ function renderTable() {
       <tr>
         <td><div class="name-cell">
           <div class="avatar">${initials(s.nome)}</div>
-          <div><div class="name">${s.nome}</div><div class="email">${s.email}</div></div>
+          <div><div class="name">${esc(s.nome)}</div><div class="email">${esc(s.email)}</div></div>
         </div></td>
-        <td><span class="plan-badge plan-${s.plano}">${cap(s.plano)}</span></td>
-        <td><span class="status-badge status-${s.status}">${cap(s.status)}</span></td>
+        <td><span class="plan-badge plan-${esc(s.plano)}">${esc(cap(s.plano))}</span></td>
+        <td><span class="status-badge status-${esc(s.status)}">${esc(cap(s.status))}</span></td>
         <td style="color:var(--text2)">${fmtDate(s.cadastro)}</td>
         <td style="color:var(--text2)">${fmtDate(s.ultimo_acesso)}</td>
         <td><div style="display:flex;gap:6px">
           <button class="btn-sm btn-view"   onclick="viewSubscriber('${s.id}')">Ver</button>
           <button class="btn-sm btn-edit"   onclick="editSubscriber('${s.id}')">Editar</button>
           <button class="btn-sm btn-edit"   onclick="openResetModal('${s.id}')">Senha</button>
-          <button class="btn-sm btn-delete" onclick="deleteSubscriber('${s.id}','${s.nome}')">✕</button>
+          <button class="btn-sm btn-delete" onclick="deleteSubscriber('${esc(s.id)}')">✕</button>
         </div></td>
       </tr>`).join('');
   }
@@ -683,7 +687,8 @@ async function saveSubscriber() {
 }
 
 // ── SUPABASE: DELETE ──────────────────────────
-async function deleteSubscriber(id, nome) {
+async function deleteSubscriber(id) {
+  const nome = all.find(x => x.id === id)?.nome || 'este assinante';
   if (!confirm(`Remover "${nome}"?`)) return;
   showLoading(true);
   const { error } = await sb.from('subscribers').delete().eq('id', id);
@@ -771,18 +776,18 @@ function viewSubscriber(id) {
   document.getElementById('view-avatar').textContent = initials(s.nome);
   document.getElementById('view-nome').textContent  = s.nome;
   document.getElementById('view-email').textContent = s.email;
-  document.getElementById('view-status-badge').innerHTML = `<span class="status-badge status-${s.status}">${cap(s.status)}</span>`;
+  document.getElementById('view-status-badge').innerHTML = `<span class="status-badge status-${esc(s.status)}">${esc(cap(s.status))}</span>`;
   document.getElementById('view-edit-btn').onclick = () => editSubscriber(id);
   document.getElementById('view-grid').innerHTML = `
-    <div class="info-item"><label>Plano</label><div class="val"><span class="plan-badge plan-${s.plano}">${cap(s.plano)}</span></div></div>
-    <div class="info-item"><label>Empresa</label><div class="val">${s.empresa||'—'}</div></div>
-    <div class="info-item"><label>Telefone</label><div class="val">${s.tel||'—'}</div></div>
-    <div class="info-item"><label>E-mail</label><div class="val" style="word-break:break-all">${s.email}</div></div>
+    <div class="info-item"><label>Plano</label><div class="val"><span class="plan-badge plan-${esc(s.plano)}">${esc(cap(s.plano))}</span></div></div>
+    <div class="info-item"><label>Empresa</label><div class="val">${esc(s.empresa||'—')}</div></div>
+    <div class="info-item"><label>Telefone</label><div class="val">${esc(s.tel||'—')}</div></div>
+    <div class="info-item"><label>E-mail</label><div class="val" style="word-break:break-all">${esc(s.email)}</div></div>
     <div class="info-item"><label>Cadastro</label><div class="val">${fmtDate(s.cadastro)}</div></div>
     <div class="info-item"><label>Expiração</label><div class="val">${fmtDate(s.expira)}</div></div>
     <div class="info-item"><label>Último acesso</label><div class="val">${fmtDate(s.ultimo_acesso)}</div></div>
-    <div class="info-item"><label>ID</label><div class="val" style="font-size:.72rem;color:var(--text2)">${s.id}</div></div>
-    ${s.obs ? `<div class="info-item full"><label>Observações</label><div class="val" style="color:var(--text2)">${s.obs}</div></div>` : ''}
+    <div class="info-item"><label>ID</label><div class="val" style="font-size:.72rem;color:var(--text2)">${esc(s.id)}</div></div>
+    ${s.obs ? `<div class="info-item full"><label>Observações</label><div class="val" style="color:var(--text2)">${esc(s.obs)}</div></div>` : ''}
   `;
   document.getElementById('modal-view').classList.add('open');
 }
@@ -793,7 +798,7 @@ function exportCSV() {
   const head = 'Nome,Email,Telefone,Empresa,Plano,Status,Cadastro,Expira,Ultimo Acesso,Obs';
   const rows = filtered.map(s =>
     [s.nome,s.email,s.tel,s.empresa,s.plano,s.status,s.cadastro,s.expira,s.ultimo_acesso,s.obs]
-    .map(v=>`"${(v||'').replace(/"/g,'""')}"`).join(','));
+    .map(v=>{ let t = String(v||''); if (/^[=+\-@\t\r]/.test(t)) t = "'" + t; return `"${t.replace(/"/g,'""')}"`; }).join(','));
   const a = document.createElement('a');
   a.href = 'data:text/csv;charset=utf-8,' + encodeURIComponent([head,...rows].join('\n'));
   a.download = 'assinantes-meuargus.csv'; a.click();

@@ -125,7 +125,7 @@ async function sincronizarPosicaoCaixa(inicioHandler, subscriberId, providerName
       (porMoeda[moeda] ||= []).push(`${providerName}:${duplicataId}`);
     }
     for (const [moeda, erpIds] of Object.entries(porMoeda)) {
-      await patchLancamentosMoedaEmLote(erpIds, moeda);
+      await patchLancamentosMoedaEmLote(subscriberId, erpIds, moeda);
     }
 
     await deleteSyncEstado(subscriberId, providerName, 'posicao_caixa');

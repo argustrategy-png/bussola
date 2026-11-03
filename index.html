@@ -945,7 +945,7 @@ async function copiarMsg(msg) {
 function acaoCobranca(r, tplKey, dias) {
   const msg = fillTemplate(templatesState[tplKey], r, dias);
   const link = waLink(r.contraparte_telefone, msg);
-  const escMsg = msg.replace(/"/g, '&quot;');
+  const escMsg = escapeHtml(msg);
   if (link) return `<a class="btn-whatsapp" href="${link}" target="_blank" rel="noopener">📲 WhatsApp</a>`;
   return `<button class="btn-copy" data-msg="${escMsg}" onclick="copiarMsg(this.dataset.msg)">Copiar msg</button>`;
 }
@@ -1918,8 +1918,8 @@ function renderCobranca() {
   } else {
     tbA.innerHTML = aVencer.map(r => `
       <tr>
-        <td>${r.contraparte || '—'}</td>
-        <td>${r.descricao}</td>
+        <td>${escapeHtml(r.contraparte || '—')}</td>
+        <td>${escapeHtml(r.descricao)}</td>
         <td>${r.dias === 0 ? '<strong>Hoje</strong>' : fmtDate(r.vencimento)}</td>
         <td>${fmt(r.valor)}</td>
         <td>${acaoCobranca(r, r.dias === 0 ? 'vencimento' : 'lembrete', r.dias)}</td>
@@ -1950,8 +1950,8 @@ function renderCobranca() {
   } else {
     tbV.innerHTML = vencidos.map(r => `
       <tr>
-        <td>${r.contraparte || '—'}</td>
-        <td>${r.descricao}</td>
+        <td>${escapeHtml(r.contraparte || '—')}</td>
+        <td>${escapeHtml(r.descricao)}</td>
         <td style="color:var(--red);font-weight:600">${fmtDate(r.vencimento)}</td>
         <td style="color:var(--red);font-weight:600">${r.dias} dia(s)</td>
         <td>${fmt(r.valor)}</td>
@@ -1982,7 +1982,7 @@ function renderCobranca() {
       else if (c.maiorAtraso > 0) { status = 'Atenção'; cls = 'ctv'; }
       else { status = 'Em dia'; cls = 'receber'; }
       return `<tr>
-        <td>${nome}</td>
+        <td>${escapeHtml(nome)}</td>
         <td>${fmt(c.recebido)}</td>
         <td>${fmt(c.aberto)}</td>
         <td>${c.maiorAtraso > 0 ? c.maiorAtraso + ' dia(s)' : '—'}</td>
@@ -2050,7 +2050,7 @@ function renderInsights() {
   }
   tb.innerHTML = pagarItems.map(r => `
     <tr>
-      <td>${r.descricao}</td>
+      <td>${escapeHtml(r.descricao)}</td>
       <td><span class="badge pagar">A Pagar</span></td>
       <td>${fmt(r.valor)}</td>
       <td>${r.status === 'pago' ? '✅ Pago' : '⏳ Pendente'}</td>
@@ -2150,9 +2150,9 @@ function renderTable() {
     const tocBadge = r.tipo === 'pagar' ? `<span class="badge ${r.toc||'do'}">${r.toc === 'ctv' ? 'Variável' : 'Fixo'}</span>` : '—';
     return `<tr class="${r.status==='pago'?'row-paid':''}">
       <td><span class="badge ${r.tipo}">${r.tipo==='receber'?'Receber':'Pagar'}</span></td>
-      <td>${r.descricao}${r.recorrencia&&r.recorrencia!=='none'?` <span class="tag-status">↻${r.recorrencia}</span>`:''}</td>
-      <td>${r.categoria||'—'}</td>
-      <td>${r.contraparte||'—'}</td>
+      <td>${escapeHtml(r.descricao)}${r.recorrencia&&r.recorrencia!=='none'?` <span class="tag-status">↻${escapeHtml(r.recorrencia)}</span>`:''}</td>
+      <td>${escapeHtml(r.categoria||'—')}</td>
+      <td>${escapeHtml(r.contraparte||'—')}</td>
       <td style="${vencido?'color:var(--red);font-weight:600':''}">${fmtDate(r.vencimento)}</td>
       <td>${fmt(r.valor)}</td>
       <td>${tocBadge}</td>
@@ -2418,7 +2418,7 @@ function processRows(rows) {
   const tbl = document.getElementById('import-preview');
   tbl.querySelector('thead').innerHTML = '<tr><th>Tipo</th><th>Descrição</th><th>Vencimento</th><th>Valor</th><th>Custo</th></tr>';
   tbl.querySelector('tbody').innerHTML = pendingImport.slice(0, 20).map(r =>
-    `<tr><td><span class="badge ${r.tipo}">${r.tipo}</span></td><td>${r.descricao}</td><td>${fmtDate(r.vencimento)}</td><td>${fmt(r.valor)}</td><td><span class="badge ${r.toc}">${r.toc==='ctv'?'VARIÁVEL':'FIXO'}</span></td></tr>`
+    `<tr><td><span class="badge ${escapeHtml(r.tipo)}">${escapeHtml(r.tipo)}</span></td><td>${escapeHtml(r.descricao)}</td><td>${fmtDate(r.vencimento)}</td><td>${fmt(r.valor)}</td><td><span class="badge ${r.toc}">${r.toc==='ctv'?'VARIÁVEL':'FIXO'}</span></td></tr>`
   ).join('') + (pendingImport.length > 20 ? `<tr><td colspan="5" class="empty">...e mais ${pendingImport.length-20} registros</td></tr>` : '');
 }
 
@@ -2655,7 +2655,7 @@ let chatHistory = [];
 let chatEnviando = false;
 
 function escapeHtml(s) {
-  return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  return String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
 }
 
 // Markdown simples pra resposta do assistente: negrito, cabeçalhos, listas e
@@ -2744,12 +2744,23 @@ async function enviarPerguntaAssistente() {
   }
 }
 
-function conectarERP(provider) {
+async function conectarERP(provider) {
   const cfg = ERP_PROVIDERS[provider];
   if (cfg.authType === 'apikey') { openApiKeyModal(provider); return; }
   if (!cfg.clientId) { showSync(`${cfg.label} ainda não está configurado nesta conta (falta cadastrar o app e o Client ID).`, true); return; }
+  // O state é emitido e assinado pelo servidor (junto com um cookie deste
+  // navegador) — ver api/_lib/oauth-state.js.
+  let state;
+  try {
+    const resp = await fetch('/api/erp/status', { method: 'POST', headers: await erpAuthHeader(), body: JSON.stringify({ action: 'oauth_state', provider }) });
+    if (!resp.ok) throw new Error(resp.status);
+    state = (await resp.json()).state;
+  } catch (e) {
+    showSync(`Não foi possível iniciar a conexão com ${cfg.label}. Tente novamente.`, true);
+    return;
+  }
   const redirectUri = `${location.origin}/api/${provider}/callback`;
-  const url = `${cfg.authorizeUrl}?response_type=code&client_id=${encodeURIComponent(cfg.clientId)}&state=${encodeURIComponent(currentUser.id)}&redirect_uri=${encodeURIComponent(redirectUri)}`;
+  const url = `${cfg.authorizeUrl}?response_type=code&client_id=${encodeURIComponent(cfg.clientId)}&state=${encodeURIComponent(state)}&redirect_uri=${encodeURIComponent(redirectUri)}`;
   location.href = url;
 }
 
@@ -2904,6 +2915,7 @@ const ERP_ERROS = {
   token_exchange_failed: 'Não foi possível concluir a autorização. Tente conectar novamente.',
   save_failed: 'Erro ao salvar a conexão. Tente novamente em instantes.',
   conta_nao_verificada: 'Não foi possível confirmar sua empresa. Por segurança, a conexão foi cancelada. Tente novamente.',
+  state_invalido: 'A autorização expirou ou não foi iniciada neste navegador. Clique em "Conectar" de novo pelo MeuArgus.',
 };
 
 function handleErpRedirectParams() {

@@ -73,7 +73,7 @@ export async function erpAccountJaConectadoEmOutraConta(provider, erpAccountId, 
 }
 
 export async function upsertLancamentos(lancamentos) {
-  return fetch(`${process.env.SUPABASE_URL}/rest/v1/lancamentos?on_conflict=erp_id`, {
+  return fetch(`${process.env.SUPABASE_URL}/rest/v1/lancamentos?on_conflict=subscriber_id,erp_id`, {
     method: 'POST',
     headers: serviceHeaders({ 'Content-Type': 'application/json', Prefer: 'resolution=merge-duplicates' }),
     body: JSON.stringify(lancamentos),
@@ -206,10 +206,10 @@ export async function patchLancamentoMoeda(id, moeda) {
 // Marca lançamentos como moeda='BRL' via update em massa por lista de IDs —
 // usado pra resolver de uma vez os que a movimentação de caixa já provou
 // serem BRL (ver sincronizarPosicaoCaixa), sem 1 patch por registro.
-export async function patchLancamentosMoedaEmLote(ids, moeda) {
+export async function patchLancamentosMoedaEmLote(subscriberId, ids, moeda) {
   if (!ids.length) return { ok: true };
   const idsParam = ids.map((id) => encodeURIComponent(id)).join(',');
-  return fetch(`${process.env.SUPABASE_URL}/rest/v1/lancamentos?erp_id=in.(${idsParam})`, {
+  return fetch(`${process.env.SUPABASE_URL}/rest/v1/lancamentos?subscriber_id=eq.${subscriberId}&erp_id=in.(${idsParam})`, {
     method: 'PATCH',
     headers: serviceHeaders({ 'Content-Type': 'application/json' }),
     body: JSON.stringify({ moeda }),

@@ -12,16 +12,22 @@ async function readRawBody(req) {
   return Buffer.concat(chunks);
 }
 
+// Tolerância de 5 min entre o timestamp assinado e agora (a mesma do SDK
+// oficial) — sem isso, um evento capturado podia ser reenviado depois.
+const TOLERANCIA_S = 300;
+
 function verifySignature(rawBody, signatureHeader, secret) {
-  if (!signatureHeader) return false;
-  const parts = Object.fromEntries(signatureHeader.split(',').map((p) => p.split('=')));
-  const signedPayload = `${parts.t}.${rawBody}`;
-  const expected = crypto.createHmac('sha256', secret).update(signedPayload).digest('hex');
-  try {
-    return crypto.timingSafeEqual(Buffer.from(expected), Buffer.from(parts.v1));
-  } catch {
-    return false;
-  }
+  if (!signatureHeader || !secret) return false;
+  // O header pode trazer mais de um v1 (durante a troca do segredo do webhook).
+  const pares = signatureHeader.split(',').map((p) => p.split('='));
+  const t = Number(pares.find(([k]) => k === 't')?.[1]);
+  const assinaturas = pares.filter(([k]) => k === 'v1').map(([, v]) => v);
+  if (!t || !assinaturas.length || Math.abs(Date.now() / 1000 - t) > TOLERANCIA_S) return false;
+  const expected = Buffer.from(crypto.createHmac('sha256', secret).update(`${t}.${rawBody}`).digest('hex'));
+  return assinaturas.some((v) => {
+    const recebida = Buffer.from(v);
+    return recebida.length === expected.length && crypto.timingSafeEqual(expected, recebida);
+  });
 }
 
 async function stripeGet(path) {
@@ -40,11 +46,15 @@ function currentPeriodEnd(sub) {
 async function updateSubscriberByCustomer(stripeCustomerId, patch) {
   const supabaseUrl = process.env.SUPABASE_URL;
   const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
-  await fetch(`${supabaseUrl}/rest/v1/subscribers?stripe_customer_id=eq.${stripeCustomerId}`, {
+  const resp = await fetch(`${supabaseUrl}/rest/v1/subscribers?stripe_customer_id=eq.${encodeURIComponent(stripeCustomerId)}`, {
     method: 'PATCH',
     headers: { apikey: serviceKey, Authorization: `Bearer ${serviceKey}`, 'Content-Type': 'application/json' },
     body: JSON.stringify(patch),
   });
+  // Antes a falha era ignorada e o webhook respondia 200: o Stripe não
+  // reenviava e o assinante ficava com plano/status errado sem ninguém saber.
+  // Lançando aqui, o handler responde 500 e o Stripe tenta de novo.
+  if (!resp.ok) throw new Error(`Falha ao atualizar assinante ${stripeCustomerId}: ${resp.status} ${await resp.text()}`);
 }
 
 export default async function handler(req, res) {

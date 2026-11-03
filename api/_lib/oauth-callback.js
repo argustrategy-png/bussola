@@ -5,6 +5,7 @@
 
 import { getProvider } from './providers/index.js';
 import { upsertIntegracao, erpAccountJaConectadoEmOutraConta } from './supabase.js';
+import { validarState, cookieNonceApagar } from './oauth-state.js';
 
 export async function handleOAuthCallback(providerName, req, res) {
   const provider = getProvider(providerName);
@@ -15,7 +16,12 @@ export async function handleOAuthCallback(providerName, req, res) {
   // MeuArgus) não sabemos de qual assinante é: manda pra uma tela amigável.
   if (!code || !state) return res.redirect(`/app?erp_erro=iniciar_pelo_meuargus&provider=${providerName}`);
 
-  const subscriberId = state;
+  // O state precisa ter sido emitido por nós para este navegador (ver
+  // _lib/oauth-state.js) — senão um link montado por terceiros ligaria o ERP
+  // de quem clicou à conta de quem montou o link.
+  const subscriberId = validarState(req, state, providerName);
+  res.setHeader('Set-Cookie', cookieNonceApagar());
+  if (!subscriberId) return res.redirect(`/app?erp_erro=state_invalido&provider=${providerName}`);
   const redirectUri = `https://${req.headers.host}/api/${providerName}/callback`;
 
   try {

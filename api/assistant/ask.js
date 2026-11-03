@@ -20,6 +20,35 @@ import { getAuthenticatedSubscriber } from '../_lib/supabase.js';
 const MODEL = 'gemini-3.8-flash';
 const GEMINI_API = `https://generativelanguage.googleapis.com/v1beta/models/${MODEL}:generateContent`;
 const MAX_RODADAS_FERRAMENTA = 5;
+const MAX_MSG_CHARS = 2000;
+const MAX_HISTORICO = 40;
+const MAX_HISTORICO_CHARS = 60000;
+
+// Devolve só as falas em texto (sem as chamadas de ferramenta e seus
+// resultados, que trazem até 100 lançamentos cada) e só as mais recentes —
+// o histórico volta inteiro na próxima pergunta e precisa caber nos limites acima.
+function historicoCompacto(contents) {
+  const falas = contents
+    .map((c) => ({ role: c.role, parts: (c.parts || []).filter((p) => typeof p.text === 'string' && !p.thought).map((p) => ({ text: p.text })) }))
+    .filter((c) => c.parts.length);
+  let recentes = falas.slice(-(MAX_HISTORICO - 2));
+  while (recentes.length && (recentes[0].role !== 'user' || JSON.stringify(recentes).length > MAX_HISTORICO_CHARS - MAX_MSG_CHARS * 2)) recentes = recentes.slice(1);
+  return recentes;
+}
+
+// O paywall do app é só na tela; aqui, que gasta dinheiro de verdade, confere
+// no banco: admin, assinatura ativa ou teste grátis ainda dentro do prazo.
+async function assinaturaAtiva(subscriberId) {
+  const resp = await fetch(
+    `${process.env.SUPABASE_URL}/rest/v1/subscribers?id=eq.${subscriberId}&select=status,expira,is_admin`,
+    { headers: { apikey: process.env.SUPABASE_SERVICE_ROLE_KEY, Authorization: `Bearer ${process.env.SUPABASE_SERVICE_ROLE_KEY}` } }
+  );
+  if (!resp.ok) return false;
+  const [s] = await resp.json();
+  if (!s) return false;
+  if (s.is_admin || s.status === 'ativo') return true;
+  return s.status === 'trial' && !!s.expira && s.expira >= today();
+}
 
 const TOOLS = [
   {
@@ -232,6 +261,13 @@ export default async function handler(req, res) {
 
   const { message, history } = req.body || {};
   if (!message || typeof message !== 'string') return res.status(400).json({ error: 'message obrigatório' });
+  // Cada chamada custa (Gemini é pago por token): limita o tamanho do que o
+  // navegador pode mandar, senão um histórico gigante vira conta alta.
+  if (message.length > MAX_MSG_CHARS) return res.status(400).json({ error: 'mensagem_muito_longa' });
+  if (history !== undefined && (!Array.isArray(history) || history.length > MAX_HISTORICO || JSON.stringify(history).length > MAX_HISTORICO_CHARS)) {
+    return res.status(400).json({ error: 'historico_muito_longo' });
+  }
+  if (!(await assinaturaAtiva(subscriberId))) return res.status(402).json({ error: 'assinatura_inativa' });
 
   try {
     const contents = [...(Array.isArray(history) ? history : []), { role: 'user', parts: [{ text: message }] }];
@@ -245,7 +281,7 @@ export default async function handler(req, res) {
       const chamadasFuncao = parts.filter((p) => p.functionCall);
       if (chamadasFuncao.length === 0) {
         const texto = parts.filter((p) => p.text).map((p) => p.text).join('\n');
-        return res.status(200).json({ reply: texto, history: contents });
+        return res.status(200).json({ reply: texto, history: historicoCompacto(contents) });
       }
 
       const resultados = await Promise.all(chamadasFuncao.map(async (p) => {
